@@ -135,6 +135,8 @@ p { margin-bottom: 1.1rem; }
 a { color: var(--blue); text-decoration: underline; text-underline-offset: 3px; }
 strong { font-weight: 600; color: var(--ink); }
 em { font-style: italic; }
+ul, ol { margin: 0 0 1.1rem 1.3rem; line-height: 1.7; }
+li { margin-bottom: 0.35rem; }
 
 /* ── Hero ── */
 .hero {
@@ -155,7 +157,7 @@ em { font-style: italic; }
   font-size: 1.05rem;
   color: rgba(255,255,255,0.82);
   line-height: 1.7;
-  max-width: 620px;
+  max-width: 640px;
   font-style: italic;
 }
 .hero .meta {
@@ -245,6 +247,7 @@ td code { font-family: 'IBM Plex Mono', 'Menlo', monospace; font-size: 0.78rem; 
 .callout-note .callout-title   { color: var(--blue); }
 .callout-warn .callout-title   { color: var(--accent); }
 .callout-limit .callout-title  { color: #C0392B; }
+.callout ul { margin: 0.5rem 0 0 1.2rem; }
 
 /* ── Flow diagram ── */
 .flow {
@@ -313,6 +316,7 @@ pre {
   border: 1px solid var(--rule);
   color: var(--navy);
 }
+code { font-family: 'IBM Plex Mono', 'Menlo', monospace; }
 
 /* ── Footnotes ── */
 .footnote {
@@ -355,29 +359,37 @@ pre {
   </div>
   <ul>
     <li class="nav-section">Přehled</li>
-    <li><a href="#uvod">Úvod a motivace</a></li>
+    <li><a href="#uvod">Úvod a epistemická pozice</a></li>
     <li><a href="#architektura">Architektura modelu</a></li>
+    <li><a href="#retez">Kauzální řetěz a fixed-point</a></li>
     <li><a href="#datove-zdroje">Datové zdroje</a></li>
 
-    <li class="nav-section">Makroekonomický blok</li>
-    <li><a href="#ar-model">AR(p) jádro</a></li>
-    <li><a href="#mp-kanal">Měnověpolitický kanál</a></li>
-    <li><a href="#mzdovy-kanal">Mzdový cost-push</a></li>
-    <li><a href="#phillips">Phillipsova křivka</a></li>
-    <li><a href="#okun">Okunův zákon</a></li>
-    <li><a href="#poradi">Kauzální pořadí</a></li>
+    <li class="nav-section">Makroekonomické jádro</li>
+    <li><a href="#ar-jadro">AR(2) jádro a šoky</a></li>
+    <li><a href="#is-krivka">IS křivka (A0)</a></li>
+    <li><a href="#mp-kanal">Měnová politika → inflace (A)</a></li>
+    <li><a href="#cost-push">Mzdový cost-push (B)</a></li>
+    <li><a href="#hdp-gap">HDP mezera (C)</a></li>
+    <li><a href="#erpt">Kurzový pass-through (C2)</a></li>
+    <li><a href="#phillips">Konvexní Phillipsova křivka (D)</a></li>
+    <li><a href="#okun">Okunův zákon (E)</a></li>
+    <li><a href="#ocekavani">Očekávání a lepkavé jádro</a></li>
 
     <li class="nav-section">Finanční blok</li>
-    <li><a href="#fx">Devizové kurzy (RW)</a></li>
-    <li><a href="#pribor">PRIBOR (OU proces)</a></li>
     <li><a href="#repo">Repo sazba (Taylor)</a></li>
-    <li><a href="#unempl">Nezaměstnanost</a></li>
+    <li><a href="#pribor">PRIBOR (navázaný)</a></li>
+    <li><a href="#unempl">Nezaměstnanost (NAIRU)</a></li>
+    <li><a href="#fx">Devizové kurzy (RW)</a></li>
 
-    <li class="nav-section">Inference</li>
+    <li class="nav-section">Inference a validace</li>
     <li><a href="#fan-charts">Fan charty (Monte Carlo)</a></li>
-    <li><a href="#parametry">Parametry a kalibrace</a></li>
+    <li><a href="#scenare">Scénáře</a></li>
+    <li><a href="#backtest">Backtest (Theil U)</a></li>
+    <li><a href="#dekompozice">Dekompozice inflace</a></li>
 
-    <li class="nav-section">Omezení</li>
+    <li class="nav-section">Reference</li>
+    <li><a href="#parametry">Parametry a kalibrace</a></li>
+    <li><a href="#zasady">Zásady a pasti</a></li>
     <li><a href="#limity">Limity modelu</a></li>
     <li><a href="#literatura">Literatura</a></li>
   </ul>
@@ -389,26 +401,26 @@ pre {
 <div class="hero">
   <p class="sub">Metropolitní univerzita Praha &nbsp;·&nbsp; Model NOSTRADAMUP</p>
   <h1>NOSTRADAMUP</h1>
-  <p class="lead">NOSTRADAMUP, semi-strukturální model české ekonomiky kombinující statistické metody časových řad s kalibrovanými makroekonomickými vztahy. Určen pro čtvrtletní publikaci prognostických fan chartů pro klíčové makroekonomické veličiny.</p>
+  <p class="lead">Semi-strukturální novokeynesiánský model české ekonomiky. Autoregresní jádro obohacené o kompletní tříravnicové NK jádro (IS křivka, Phillipsova křivka, Taylorovo pravidlo), lepkavé jádro inflace a stavově závislý kurzový pass-through. Určen pro čtvrtletní publikaci prognostických fan chartů klíčových makroekonomických veličin.</p>
   <div class="meta">
-    <div class="meta-item">Verze <span>2.0 (2026)</span></div>
+    <div class="meta-item">Verze <span>2.5 (2026)</span></div>
     <div class="meta-item">Horizont prognózy <span>8 čtvrtletí</span></div>
     <div class="meta-item">Frekvence <span>Čtvrtletní</span></div>
-    <div class="meta-item">Jazyk implementace <span>Python 3.12</span></div>
+    <div class="meta-item">Implementace <span>Python 3.11</span></div>
   </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════ -->
 <section id="uvod">
-<h2>1. Úvod a motivace</h2>
+<h2>1. Úvod a epistemická pozice</h2>
 
-<p>Model byl vyvinut jako analytický nástroj pro pravidelné čtvrtletní publikace NOSTRADAMUP s ambicí přiblížit se kvalitou institutům jako ČNB, Ministerstvo financí ČR nebo renomované privátní prognostické domy. Základním designovým kompromisem je <strong>čitelnost a transparentnost</strong> na úkor komplexity plných DSGE modelů, při současném zachování klíčových makroekonomických identit a transmisních mechanismů.</p>
+<p>NOSTRADAMUP je analytický nástroj pro pravidelnou čtvrtletní prognózu s ambicí přiblížit se kvalitou institucím jako ČNB, Ministerstvo financí ČR nebo renomované soukromé prognostické domy. Základním designovým kompromisem je <strong>transparentnost a robustnost odhadu</strong> na úkor plné mikrofundace DSGE modelů, při zachování klíčových makroekonomických identit a transmisních mechanismů.</p>
 
-<p>Model patří do třídy tzv. <em>semi-strukturálních modelů</em>. Kombinuje nestrukturální statistickou složku (autoregresní procesy odhadnuté z dat) s kalibrovanými strukturálními parametry odvozujícími se z ekonomické teorie. Tento přístup volí i řada centrálních bank pro střednědobé projekce, kde plné DSGE modely naráží na problémy se stabilitou odhadu při strukturálních zlomech.</p>
+<p>Model patří do třídy <em>semi-strukturálních modelů</em>. Jádrem je nestrukturální statistická složka (autoregresní proces odhadnutý z dat), na kterou jsou navěšené ekonomické kanály jako deterministické korekce a zpětné vazby s kalibrovanými strukturálními parametry. Nejde o plný DSGE (chybí explicitní mikrozáklady i dopředu řešená racionální očekávání), model však obsahuje kompletní tříravnicové novokeynesiánské jádro: dynamickou IS křivku, Phillipsovu křivku a Taylorovo pravidlo. Tento přístup volí řada centrálních bank pro střednědobé projekce, kde plné DSGE modely naráží na nestabilitu odhadu při strukturálních zlomech.</p>
 
 <div class="callout callout-note">
   <div class="callout-title">Epistemická pozice</div>
-  Výstupy modelu jsou podmíněné projekce. Fan charty ilustrují distribuci možných budoucích stavů světa podmíněnou na aktuálních datech, kalibrovaných parametrech a lineárních aproximacích ekonomických vztahů. Nejde o predikce v deterministickém smyslu. Klíčovým výstupem je <em>šířka</em> intervalu spolehlivosti, nikoli jen mediánová trajektorie.
+  Výstupy jsou <em>podmíněné</em> projekce. Fan charty ilustrují distribuci možných budoucích stavů světa podmíněnou aktuálními daty, kalibrovanými parametry a lineárními aproximacemi ekonomických vztahů. Nejde o predikce v deterministickém smyslu. Klíčovým výstupem je <em>šířka</em> intervalu spolehlivosti, nikoli jen mediánová trajektorie. Kalibrace je validována out-of-sample backtestem (Theil U), ne pouhým expertním odhadem.
 </div>
 
 </section>
@@ -417,444 +429,601 @@ pre {
 <section id="architektura">
 <h2>2. Architektura modelu</h2>
 
-<p>Model se skládá ze dvou vzájemně propojených bloků s jednosměrným tokem informací (recursive structure):</p>
-
-<div class="flow">
-  <div class="flow-node">HDP (QoQ, YoY)</div>
-  <div class="flow-arr">→</div>
-  <div class="flow-lag">Okunův zákon (lag 1Q)</div>
-  <div class="flow-arr">→</div>
-  <div class="flow-node secondary">Nezaměstnanost</div>
-  <div class="flow-arr">→</div>
-  <div class="flow-lag">Phillips (lag 1Q)</div>
-  <div class="flow-arr">→</div>
-  <div class="flow-node secondary">Mzdy</div>
-  <div class="flow-arr">→</div>
-  <div class="flow-lag">Cost-push (lag 1Q)</div>
-  <div class="flow-arr">→</div>
-  <div class="flow-node outcome">Inflace</div>
-</div>
-
-<p>Souběžně běží finanční blok, jehož výstupy vstupují do makroekonomického bloku jako exogenní podmínky:</p>
-
-<div class="flow">
-  <div class="flow-node">PRIBOR 3M</div>
-  <div class="flow-arr">→</div>
-  <div class="flow-lag">MP transmise (lag 4Q)</div>
-  <div class="flow-arr">→</div>
-  <div class="flow-node outcome">Inflace ↓</div>
-</div>
+<p>Model se skládá z makroekonomického a finančního bloku, které jsou obousměrně provázané. Finanční blok dodává makrobloku sazbovou a kurzovou cestu, makroblok dodává finančnímu bloku inflaci a výstupní mezeru (přes Taylorovo pravidlo). Tato simultánnost je řešena iterativně (viz sekce 3).</p>
 
 <h3>Endogenní proměnné</h3>
 <table>
   <tr><th>Symbol</th><th>Proměnná</th><th>Zdroj dat</th><th>Frekvence</th></tr>
   <tr><td>gdp_qoq</td><td>HDP – mezikvartální reálný růst (%)</td><td>Eurostat namq_10_gdp</td><td>Čtvrtletní</td></tr>
-  <tr><td>gdp_yoy</td><td>HDP – meziroční reálný růst (%)</td><td>Odvozeno (rolling sum)</td><td>Čtvrtletní</td></tr>
+  <tr><td>gdp_yoy</td><td>HDP – meziroční reálný růst (%)</td><td>Odvozeno (rolling 4Q)</td><td>Čtvrtletní</td></tr>
   <tr><td>hicp_yoy</td><td>Inflace HICP – meziroční (%)</td><td>Eurostat prc_hicp_manr</td><td>Měsíčně → Q</td></tr>
-  <tr><td>cpi_yoy</td><td>Inflace CPI ČSÚ – meziroční (%)</td><td>Eurostat prc_hicp_manr</td><td>Měsíčně → Q</td></tr>
+  <tr><td>cpi_yoy</td><td>Inflace CPI – meziroční (%)</td><td>Eurostat / ČSÚ</td><td>Měsíčně → Q</td></tr>
   <tr><td>wages_yoy</td><td>Průměrné mzdy – meziroční růst (%)</td><td>ČNB ARAD / záložní</td><td>Čtvrtletní</td></tr>
-  <tr><td>eurczk</td><td>EUR/CZK – devizový kurz</td><td>ČNB (denní TXT)</td><td>Denně → Q</td></tr>
-  <tr><td>eurusd</td><td>EUR/USD – devizový kurz</td><td>ECB Data Portal</td><td>Denně → Q</td></tr>
-  <tr><td>pribor3m</td><td>PRIBOR 3M (%)</td><td>ČNB (TXT po rocích)</td><td>Denně → Q</td></tr>
-  <tr><td>repo_rate</td><td>Repo sazba ČNB (%)</td><td>ČNB web / záložní</td><td>Na zasedání → Q</td></tr>
   <tr><td>unempl</td><td>Míra nezaměstnanosti (%)</td><td>Eurostat une_rt_q</td><td>Čtvrtletní</td></tr>
+  <tr><td>repo_rate</td><td>2T repo sazba ČNB (%)</td><td>ČNB / záložní</td><td>Na zasedání → Q</td></tr>
+  <tr><td>pribor3m</td><td>PRIBOR 3M (%)</td><td>ČNB (TXT po rocích)</td><td>Denně → Q</td></tr>
+  <tr><td>pribor12m</td><td>PRIBOR 12M (%)</td><td>ČNB / spread</td><td>Denně → Q</td></tr>
+  <tr><td>eurczk</td><td>EUR/CZK – devizový kurz</td><td>ČNB (denní)</td><td>Denně → Q</td></tr>
+  <tr><td>eurusd</td><td>EUR/USD – devizový kurz</td><td>ECB Data Portal</td><td>Denně → Q</td></tr>
+</table>
+
+<h3>Kanály makrobloku</h3>
+<table>
+  <tr><th>Kanál</th><th>Popis</th><th>Literatura</th></tr>
+  <tr><td>A0</td><td>Dynamická IS: reálná sazba nad r* tlumí HDP, lag 1–4Q</td><td>Galí (2015); Clarida-Galí-Gertler (1999)</td></tr>
+  <tr><td>A</td><td>Měnová politika → inflace, lag 4Q</td><td>Christiano et al. (1999)</td></tr>
+  <tr><td>B</td><td>Mzdový cost-push → inflace, lag 1Q</td><td>Galí-Gertler (1999)</td></tr>
+  <tr><td>C</td><td>HDP mezera → inflace, lag 1Q</td><td>—</td></tr>
+  <tr><td>C2</td><td>ERPT: kurz → dovozní inflace, stavově závislý</td><td>moderní ERPT literatura</td></tr>
+  <tr><td>D</td><td>Konvexní Phillipsova křivka: nezaměstnanost → mzdy</td><td>Benigno-Eggertsson (2023)</td></tr>
+  <tr><td>E</td><td>Okunův zákon: HDP → nezaměstnanost</td><td>Okun (1962)</td></tr>
+  <tr><td>—</td><td>Očekávání ukotvená k lepkavému jádru, ne k fixnímu cíli</td><td>Stock-Watson (2007); Fuhrer (2011); Ball et al. (IMF 2023)</td></tr>
 </table>
 
 </section>
 
 <!-- ═══════════════════════════════════════════════════════ -->
-<section id="datove-zdroje">
-<h2>3. Datové zdroje a preprocessing</h2>
+<section id="retez">
+<h2>3. Kauzální řetěz a fixed-point řešení</h2>
 
-<p>Všechna data jsou čtvrtletní nebo jsou převedena na čtvrtletní frekvenci průměrem (pro denní a měsíční časové řady). Dataset sahá od Q1 2010 a je průběžně aktualizován z veřejných zdrojů bez API klíče. V případě výpadku živého stahování model přechází na záložní hardcoded data aktualizovaná do Q4 2025.</p>
+<p>Kanály tvoří uzavřený kauzální řetěz. Sazby ovlivní reálnou sazbu, ta poptávku (HDP) a nezaměstnanost, ty mzdy a inflaci, a inflace zpětně sazby přes Taylorovo pravidlo:</p>
 
-<h3>Strategie fallback dat</h3>
-<p>Model používá hybridní přístup: záložní data tvoří základ časové řady, živě stažená data z API je překryjí pro shodující se datumové indexy. Tím je zaručena kontinuita časové řady i při výpadcích API (Eurostat 400/406, ČNB ARAD 404).</p>
+<div class="flow">
+  <div class="flow-node">Sazby</div>
+  <div class="flow-arr">→</div>
+  <div class="flow-node secondary">Reálná sazba</div>
+  <div class="flow-arr">→</div>
+  <div class="flow-node secondary">HDP (IS)</div>
+  <div class="flow-arr">→</div>
+  <div class="flow-node secondary">Nezaměstnanost</div>
+  <div class="flow-arr">→</div>
+  <div class="flow-node secondary">Mzdy (PC)</div>
+  <div class="flow-arr">→</div>
+  <div class="flow-node outcome">Inflace</div>
+  <div class="flow-arr">→</div>
+  <div class="flow-node">Sazby (Taylor)</div>
+</div>
 
-<div class="callout callout-warn">
-  <div class="callout-title">Datová omezení — ČNB PRIBOR</div>
-  Od 1. ledna 2025 ČNB publikuje PRIBOR se 48h zpožděním a pouze pro interní účely uživatelů (CFBF licence). Živé stahování probíhá přes TXT soubory po rocích; pro roky 2024–2025 jsou záložní čtvrtletní průměry vypočteny z dostupných denních dat.
+<p>Vzniká simultánnost: HDP potřebuje očekávanou inflaci (pro ex-ante reálnou sazbu v IS křivce), inflace potřebuje HDP (výstupní mezera). Model to řeší <strong>iterací pevného bodu (2 průchody)</strong>:</p>
+
+<ol>
+  <li><strong>Startovní odhad:</strong> inflace se spočítá při neutrální sazbové cestě jako první přiblížení.</li>
+  <li><strong>Plný řetěz:</strong> z tohoto odhadu se odvodí repo (Taylor), navázaný PRIBOR, reálná sazba, HDP, nezaměstnanost, mzdy a zpřesněná inflace.</li>
+  <li><strong>Zpřesnění:</strong> druhý průchod dosadí zpřesněnou inflaci zpět do reálné sazby a Taylorova pravidla.</li>
+</ol>
+
+<div class="callout callout-note">
+  <div class="callout-title">Proč zrovna dva průchody?</div>
+  Dvě iterace stačí, protože zpětné vazby jsou tlumené (koeficienty výrazně pod jednotkou) a kotva očekávání je exogenní vůči krátkodobé cestě. Další iterace už mediánovou trajektorii posouvají o zlomky desetiny procentního bodu. Ve <code>scenarios.py</code> je počet iterací parametr <code>n_policy_iters = 2</code>.
 </div>
 
 </section>
 
 <!-- ═══════════════════════════════════════════════════════ -->
-<section id="ar-model">
-<h2>4. AR(p) jádro modelu</h2>
+<section id="datove-zdroje">
+<h2>4. Datové zdroje a preprocessing</h2>
 
-<p>Každá endogenní proměnná je primárně modelována jako <strong>autoregresní proces řádu p = 2</strong> odhadnutý metodou nejmenších čtverců (OLS) na dostupném vzorku. Pro každé simulační kolo (n = 2 000 Monte Carlo simulací) jsou šoky generovány z empirické distribuce reziduí.</p>
+<p>Všechny řady jsou čtvrtletní nebo jsou na čtvrtletní frekvenci převedeny průměrem (denní a měsíční řady). Dataset sahá od roku 2010 a je aktualizován z veřejných zdrojů bez API klíče. Model používá <strong>hybridní fallback</strong>: záložní data (hardcoded do <code>data/raw/</code>) tvoří základ řady, živě stažená data z API je překryjí pro shodné datumové indexy. Tím je zaručena kontinuita i při výpadku API (Eurostat 400/406, ČNB 404).</p>
 
-<h4>Specifikace AR(2)</h4>
+<div class="callout callout-warn">
+  <div class="callout-title">Eurostat: prc_hicp_manr už je meziroční míra</div>
+  Řada <code>prc_hicp_manr</code> je publikována přímo jako meziroční změna v procentech. Na ni se <em>neaplikuje</em> žádný <code>pct_change</code>. Používá se JSON-stat 1.0 API (statistics 1.0), ne SDMX seriesKey, který na tyto dotazy vrací 400.
+</div>
+
+<div class="callout callout-warn">
+  <div class="callout-title">ČNB: repo a PRIBOR ze záložních dat</div>
+  ČNB nemá veřejné API pro 2T repo sazbu. Ta běží ze záložních dat (<code>data/raw/financial_data.csv</code>, <code>fin_intervals.json</code>) a aktualizuje se ručně při změně sazeb. PRIBOR se stahuje z TXT souborů po rocích; pro tržně implikované delší splatnosti a term prémie jsou intervaly v <code>fin_intervals.json</code>.
+</div>
+
+<p>Každá řada se před spojením do jednoho DataFramu protahuje do současnosti funkcí <code>_extend_to_present()</code>. Kdyby se to neudělalo před <code>dropna()</code>, ořízlo by spojení dataset na nejkratší řadu a nejnovější data by zmizela.</p>
+
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="ar-jadro">
+<h2>5. AR(2) jádro a struktura šoků</h2>
+
+<p>Každá endogenní proměnná je primárně modelována jako <strong>autoregresní proces řádu p = 2</strong> odhadnutý metodou nejmenších čtverců (OLS) na dostupném vzorku. Parametry se odhadují čerstvě při každém běhu, nejde o fixní kalibraci.</p>
 
 <div class="eq">
   <span class="label">(1)</span>
-  y<sub>t</sub> = c + φ<sub>1</sub> y<sub>t−1</sub> + φ<sub>2</sub> y<sub>t−2</sub> + ε<sub>t</sub>,&nbsp;&nbsp;&nbsp;ε<sub>t</sub> ~ N(0, σ̂²)
+  y<sub>t</sub> = c + φ<sub>1</sub> y<sub>t−1</sub> + φ<sub>2</sub> y<sub>t−2</sub> + korekce<sub>t</sub> + ε<sub>t</sub>
 </div>
 
-<p>kde c, φ<sub>1</sub>, φ<sub>2</sub> jsou odhadnuty OLS z historických dat, σ̂ je standardní odchylka reziduí in-sample. Parametry jsou odhadovány vždy čerstvě při každém spuštění modelu, nejde o fixní kalibraci.</p>
+<p>kde c, φ<sub>1</sub>, φ<sub>2</sub> plynou z OLS, <em>korekce<sub>t</sub></em> je suma deterministických korekcí z kanálů A0–E (viz dále) a ε<sub>t</sub> je šok. Prognóza běží jako <strong>Monte Carlo s n = 2000 simulačními cestami</strong> na horizont 8 čtvrtletí; z cest se odvodí empirické percentily fan chartu (5/25/50/75/95).</p>
 
-<h4>Rozptyl šoků</h4>
-<p>Pro inflační proměnné je rozptyl šoků podmíněně zredukován v blízkosti inflačního cíle:</p>
+<h4>Heteroskedasticita inflačních šoků</h4>
+<p>U inflačních proměnných je rozptyl šoku podmíněně zredukován v blízkosti cíle:</p>
 
 <div class="eq">
   <span class="label">(2)</span>
-  σ̃<sub>t</sub> = σ̂ · min(1, 0.5 + 0.5 · |ŷ<sub>t</sub> − π*| / 5)
+  σ̃<sub>t</sub> = σ̂ · min(1,&nbsp; 0.5 + 0.5 · |ŷ<sub>t</sub> − π*| / 5)
 </div>
 
-<p>kde π* = 2 % je inflační cíl ČNB. Tato specifikace reflektuje empirický poznatek, že inflační procesy jsou heteroskedastické, variabilita je vyšší ve vzdálenosti od cíle.</p>
+<p>kde π* = 2 % je inflační cíl ČNB a σ̂ je směrodatná odchylka reziduí in-sample. Specifikace reflektuje empirický poznatek, že inflační proces je heteroskedastický a variabilita roste se vzdáleností od cíle.</p>
 
 <div class="callout callout-note">
   <div class="callout-title">Proč AR(2) a ne VAR nebo BVAR?</div>
-  VAR model pro 10 proměnných s lag order p = 2 by vyžadoval odhad 10 × (1 + 10×2) = 210 parametrů. Při vzorku ~56 čtvrtletí je to kriticky přeparametrizovaný systém. BVAR s Minnesotovskými priory by byl elegantní alternativou, ale zvyšuje netransparentnost. Zvolená architektura explicitně zabudovává ekonomickou strukturu místo toho, aby ji nechala emergovat z dat, čímž se vyhýbá jak přeparametrizaci, tak omezením reducedform VAR identifikace.
+  VAR pro 10 proměnných s p = 2 by vyžadoval odhad 10 × (1 + 10×2) = 210 parametrů. Při vzorku kolem 60 čtvrtletí je to kriticky přeparametrizovaný systém. Zvolená architektura vkládá ekonomickou strukturu explicitně (přes kanály) místo aby ji nechala emergovat z dat, čímž se vyhýbá jak přeparametrizaci, tak omezením identifikace reduced-form VAR.
+</div>
+
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="is-krivka">
+<h2>6. Dynamická IS křivka (kanál A0)</h2>
+
+<p>Třetí rovnice novokeynesiánského jádra (Galí 2015, kap. 3): výstup reaguje na ex-ante reálnou sazbu vůči přirozené sazbě r*. Model definuje reálnou mezeru a rozkládá její vliv na mezikvartální růst HDP přes 1 až 4 čtvrtletí:</p>
+
+<div class="eq">
+  <span class="label">(3)</span>
+  real_gap<sub>t</sub> = PRIBOR<sub>t</sub> − π<sup>e</sup><sub>t</sub> − r*,&nbsp;&nbsp;&nbsp;
+  Δgdp<sub>t</sub> = − (κ<sub>IS</sub> / L<sub>IS</sub>) · Σ<sub>j=1</sub><sup>L<sub>IS</sub></sup> real_gap<sub>t−j</sub>
+</div>
+
+<table>
+  <tr><th>Symbol</th><th>Popis</th><th>Default</th></tr>
+  <tr><td>r*</td><td>Přirozená reálná sazba (<code>real_neutral</code>)</td><td>1.0 %</td></tr>
+  <tr><td>κ<sub>IS</sub></td><td>Citlivost HDP QoQ na 1 pp reálné mezery (<code>is_sensitivity</code>)</td><td>0.05</td></tr>
+  <tr><td>L<sub>IS</sub></td><td>Délka transmise do poptávky (<code>is_lag</code>)</td><td>4 Q</td></tr>
+  <tr><td>π<sup>e</sup></td><td>Očekávaná inflace (z fixed-point iterace)</td><td>—</td></tr>
+</table>
+
+<p>Kladná reálná mezera (sazby nad přirozenou úrovní) poptávku tlumí, záporná ji stimuluje. Pro meziroční řadu HDP (<code>gdp_cumulative = True</code>) se kvartální impulz kumuluje přes klouzavé 4 čtvrtletí.</p>
+
+<div class="callout callout-warn">
+  <div class="callout-title">IS puzzle: kanál drží kvůli koherenci, ne bodové přesnosti</div>
+  Backtest ukazuje, že IS kanál <em>nezlepšuje</em> bodovou predikci HDP (Theil U pro HDP QoQ je 0.79 i s ním). Přesto je v modelu ponechán: bez něj by transmise měnové politiky do reálné ekonomiky nebyla strukturálně koherentní a scénáře by nedávaly smysl. Je to vědomé rozhodnutí ve prospěch strukturální konzistence, ne zametání pod koberec.
 </div>
 
 </section>
 
 <!-- ═══════════════════════════════════════════════════════ -->
 <section id="mp-kanal">
-<h2>5. Měnověpolitický transmisní kanál</h2>
+<h2>7. Měnová politika → inflace (kanál A)</h2>
 
-<p>Ústředním strukturálním přídavkem k AR jádru je explicitní modelování transmisního mechanismu měnové politiky na inflaci. Toto je nejdůležitější strukturální omezení modelu. Bez něj by čistě statistický AR model mohl predikovat rostoucí inflaci souběžně s vysokými sazbami, protože v historických datech existuje spuriózní pozitivní korelace (ČNB zvyšovala sazby reakcí na inflaci).</p>
-
-<h4>Transmisní korekce inflace</h4>
+<p>Přímý dezinflační kanál. Restriktivita sazeb nad neutrálem se s rozloženým zpožděním promítá do nižší inflace. Bez tohoto omezení by čistě statistické AR jádro mohlo predikovat rostoucí inflaci souběžně s vysokými sazbami, protože v historických datech existuje spuriózní pozitivní korelace (ČNB zvyšovala sazby jako reakci na inflaci).</p>
 
 <div class="eq">
-  <span class="label">(3)</span>
-  Δπ<sub>t</sub><sup>MP</sup> = −λ<sub>MP</sub> · Σ<sub>j=1</sub><sup>L</sup> max(0, r<sub>t−j</sub> − r*) · (j/L²)
+  <span class="label">(4)</span>
+  Δπ<sub>t</sub><sup>MP</sup> = − λ<sub>MP</sub> · Σ<sub>j=1</sub><sup>L</sup> max(0,&nbsp; r<sub>t−j</sub> − r̄) · j / L²
 </div>
 
-<p>kde:</p>
 <table>
   <tr><th>Symbol</th><th>Popis</th><th>Default</th></tr>
-  <tr><td>r<sub>t</sub></td><td>PRIBOR 3M v čtvrtletí t (%)</td><td>—</td></tr>
-  <tr><td>r*</td><td>Neutrální sazba (natural rate of interest)</td><td>3.0 %</td></tr>
-  <tr><td>λ<sub>MP</sub></td><td>Citlivost inflace na restriktivitu</td><td>0.25</td></tr>
-  <tr><td>L</td><td>Délka transmisního lagu (čtvrtletí)</td><td>4</td></tr>
+  <tr><td>r̄</td><td>Neutrální sazba (<code>neutral_rate</code>)</td><td>3.0 %</td></tr>
+  <tr><td>λ<sub>MP</sub></td><td>Síla dezinflačního tlaku (<code>mp_sensitivity</code>)</td><td>0.25</td></tr>
+  <tr><td>L</td><td>Transmisní lag (<code>mp_lag</code>)</td><td>4 Q</td></tr>
 </table>
 
-<p>Váhová funkce j/L² zajišťuje postupné náběhání efektu: v prvním čtvrtletí je korekce nulová, vrcholí po L čtvrtletích. Toto odpovídá empirické literatuře, která konzistentně nalézá peak efekt měnové politiky na inflaci v horizontu 4–8 čtvrtletí (viz Christiano et al. 1999, Romer & Romer 2004).</p>
+<p>Váha j/L² zajišťuje postupné náběhání: v prvním čtvrtletí je korekce téměř nulová a vrcholí kolem L čtvrtletí. To odpovídá literatuře, která nalézá peak efekt měnové politiky na inflaci v horizontu 4 až 8 čtvrtletí (Christiano et al. 1999, Romer &amp; Romer 2004). Restrikce působí jen když je sazba <em>nad</em> neutrálem (funkce max), model nepředpokládá symetrický proinflační efekt volných sazeb.</p>
 
-<div class="callout callout-note">
-  <div class="callout-title">Jak nastavit r* (parametr <code>pribor_eq</code>)?</div>
-  <p>Neutrální sazba r* není odhadována z dat, je kalibrována expertně. Výchozí hodnota <strong>3.0 %</strong> vychází z těchto zdrojů:</p>
-  <ul style="margin: 0.5rem 0 0 1.2rem; line-height: 1.8;">
-    <li><strong>ČNB prognóza (zima 2025):</strong> ČNB konzistentně komunikuje, že sazby by se v střednědobém horizontu měly ustálit na úrovni neutrálních. Zimní prognóza 2025 naznačovala „mírný pokles krátkodobých tržních sazeb následovaný přibližnou stabilitou", přičemž Zpráva léto 2025 potvrdila sazby na 3.50 %.</li>
-    <li><strong>Konsensus analytiků (ČBA, 2025):</strong> Konsensus bank předpokládal stabilizaci repo sazby v rozsahu 3.25–3.50 % v roce 2026, PRIBOR 3M o ~50 bp níže → r* ≈ 2.75–3.0 %.</li>
-    <li><strong>Holston, Laubach &amp; Williams (2017):</strong> Odhady r* pro CE region v rozsahu 1–3 %, s tendencí k poklesu po pandemii.</li>
-  </ul>
-  <p style="margin-top: 0.75rem;">Pokud ČNB komunikuje výraznější posun neutrální sazby (např. v reakci na strukturální změny v eurozóně), doporučujeme tuto hodnotu aktualizovat. Sazba 3.0 % je konzervativní střed credibilního rozsahu.</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="cost-push">
+<h2>8. Mzdový cost-push (kanál B)</h2>
+
+<p>Nadměrný růst nominálních mezd nad normou se promítá do jednotkových nákladů práce a přes ně do spotřebitelských cen (Galí-Gertler 1999):</p>
+
+<div class="eq">
+  <span class="label">(5)</span>
+  Δπ<sub>t</sub><sup>W</sup> = λ<sub>W</sub> · (w<sub>t−1</sub> − w̄) · 0.25
+</div>
+
+<p>kde w<sub>t</sub> je meziroční růst mezd, w̄ = <code>wage_norm</code> = 4.0 % je růst konzistentní s 2% inflací (cíl plus produktivita), λ<sub>W</sub> = <code>wages_infl_pass</code> = 0.08 je pass-through a 0.25 normalizuje na čtvrtletí. Efekt nastupuje s lagem 1Q.</p>
+
+<div class="callout callout-warn">
+  <div class="callout-title">Reference je FIXNÍ norma, ne průměr prognózní cesty</div>
+  Mzdová mezera se měří vůči fixní normě w̄ = 4.0, nikdy vůči průměru vlastní prognózní cesty. Kdyby se měřila vůči průměru cesty, kanál by se vynuloval sám vůči sobě: trvale vysoké mzdy by pak nevytvořily žádný cost-push. Tato chyba se v projektu objevila třikrát (kanály B, C, D) a je to <strong>zásada, na které se trvá</strong> (viz sekce 20).
 </div>
 
 </section>
 
 <!-- ═══════════════════════════════════════════════════════ -->
-<section id="mzdovy-kanal">
-<h2>6. Mzdový cost-push kanál</h2>
+<section id="hdp-gap">
+<h2>9. HDP mezera → inflace (kanál C)</h2>
 
-<p>Vyšší nominální mzdy se promítají do produkčních nákladů firem, které je za podmínek omezené konkurence přenášejí do spotřebitelských cen. Model implementuje tento <em>cost-push</em> mechanismus jako exogenní korekci inflační predikce:</p>
+<p>Poptávkový tlak na ceny: růst HDP nad potenciálem tlačí inflaci vzhůru (plochá Phillipsova křivka na straně poptávky):</p>
 
 <div class="eq">
-  <span class="label">(4)</span>
-  Δπ<sub>t</sub><sup>W</sup> = λ<sub>W</sub> · (w<sub>t−1</sub> − w̄) · Δt
+  <span class="label">(6)</span>
+  Δπ<sub>t</sub><sup>C</sup> = 0.05 · (g<sub>t−1</sub> − ḡ<sub>pot</sub>)
 </div>
 
-<p>kde w<sub>t</sub> je meziroční růst mezd, w̄ je průměrný mzdový růst v prognózovaném horizontu, λ<sub>W</sub> = 0.08 je pass-through koeficient a Δt = 0.25 je délka čtvrtletí (normalizační faktor). Efekt nastupuje s lagem 1 čtvrtletí.</p>
+<p>kde g<sub>t</sub> je mezikvartální růst HDP a ḡ<sub>pot</sub> = <code>potential_gdp_qoq</code> = 0.55 % QoQ (kolem 2.2 % ročně pro ČR). Stejně jako u kanálu B je referencí <strong>potenciál</strong>, ne průměr prognózní cesty. Koeficient 0.05 je záměrně malý: přímý efekt výstupní mezery na inflaci je v modelu druhotný vůči mzdovému a kurzovému kanálu, což odpovídá zploštění Phillipsovy křivky v post-2015 období.</p>
 
-<p>Kalibrovaná hodnota λ<sub>W</sub> = 0.08 implikuje, že 1 procentní bod nadprůměrného mzdového růstu zvyšuje inflaci o 0.02 procentního bodu za čtvrtletí, tedy o 0.08 pp anualizovaně (0.02 × 4). Sečteno přes 4 čtvrtletí kumulativně přibližně 0.32 pp. Empirické studie pro ČR (ČNB 2019) nalézají krátkodobý mzdový pass-through do inflace v rozsahu 0.05–0.15 pp na 1 pp mzdového šoku za rok, přičemž efekt závisí na fázi hospodářského cyklu a otvírenosti ekonomiky. Zvolená kalibrace 0.08 leží v dolní třetině tohoto rozsahu, což odráží skutečnost, že ČR jako malá otevřená ekonomika je náchylná ke konkurenčním tlakům ze zahraničí omezujícím cenovou sílu domácích firem.</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="erpt">
+<h2>10. Kurzový pass-through / ERPT (kanál C2)</h2>
+
+<p>Oslabení koruny (EUR/CZK roste) zdraží dovoz a se zpožděním zvýší CPI. Pass-through je <strong>stavově závislý</strong>: efektivní koeficient roste s velikostí depreciace, protože firmy přenášejí velké kurzové pohyby více než malé (moderní ERPT literatura).</p>
+
+<div class="eq">
+  <span class="label">(7)</span>
+  depr<sub>t</sub> = 100 · (fx<sub>t</sub> − fx<sub>t−1</sub>) / fx<sub>t−1</sub>,&nbsp;&nbsp;&nbsp;
+  Δπ<sub>t</sub><sup>ERPT</sup> = Σ<sub>j=1</sub><sup>L<sub>E</sub></sup> β<sub>E</sub> · (1 + φ<sub>E</sub> · |depr<sub>t−j</sub>|) · depr<sub>t−j</sub> / L<sub>E</sub>
+</div>
+
+<table>
+  <tr><th>Symbol</th><th>Popis</th><th>Default</th></tr>
+  <tr><td>β<sub>E</sub></td><td>Bazální pass-through (<code>erpt_coef</code>)</td><td>0.15</td></tr>
+  <tr><td>φ<sub>E</sub></td><td>Stavová závislost (<code>erpt_state</code>)</td><td>0.02</td></tr>
+  <tr><td>L<sub>E</sub></td><td>Rozložení efektu (<code>erpt_lag</code>)</td><td>4 Q</td></tr>
+</table>
+
+<p>Kurz EUR/CZK, na kterém kanál stojí, přichází z finančního bloku (random walk s driftem, sekce 15). ERPT je jediný kanál, kde do makrobloku vstupuje devizový kurz.</p>
 
 </section>
 
 <!-- ═══════════════════════════════════════════════════════ -->
 <section id="phillips">
-<h2>7. Phillipsova křivka — trh práce a mzdy</h2>
+<h2>11. Konvexní Phillipsova křivka (kanál D)</h2>
 
-<p>Phillipsova křivka modeluje negativní vztah mezi mírou nezaměstnanosti a mzdovým růstem. Model implementuje zjednodušenou novou Phillipsovu křivku v duchu Gali &amp; Gertler (1999):</p>
+<p>Napjatost trhu práce (nezaměstnanost pod strukturální mírou NAIRU) zvyšuje mzdový růst. Na rozdíl od lineární PC se <strong>sklon zestrmuje, když je trh napjatý</strong> (Benigno-Eggertsson 2023): při silně napjatém trhu roste mzdový tlak nelineárně, při slabém zůstává křivka plochá.</p>
 
 <div class="eq">
-  <span class="label">(5)</span>
-  Δw<sub>t</sub><sup>PC</sup> = λ<sub>PC</sub> · (ū − u<sub>t−1</sub>) · Δt
+  <span class="label">(8)</span>
+  u_gap<sub>t</sub> = NAIRU − u<sub>t−1</sub>,&nbsp;&nbsp;
+  slope_eff = λ<sub>PC</sub> · (1 + c<sub>PC</sub> · max(0, u_gap<sub>t</sub>)),&nbsp;&nbsp;
+  Δw<sub>t</sub> = slope_eff · u_gap<sub>t</sub> · 0.25
 </div>
 
-<p>kde u<sub>t</sub> je míra nezaměstnanosti, ū je průměrná míra nezaměstnanosti v prognózovaném horizontu (proxy pro NAIRU), λ<sub>PC</sub> = 0.15 je sklon Phillipsovy křivky a efekt nastupuje s lagem 1Q.</p>
+<table>
+  <tr><th>Symbol</th><th>Popis</th><th>Default</th></tr>
+  <tr><td>NAIRU</td><td>Strukturální míra nezaměstnanosti (<code>nairu</code>)</td><td>2.8 %</td></tr>
+  <tr><td>λ<sub>PC</sub></td><td>Bazální sklon PC (<code>phillips_slope</code>)</td><td>0.15</td></tr>
+  <tr><td>c<sub>PC</sub></td><td>Konvexita (<code>phillips_convexity</code>)</td><td>0.8</td></tr>
+</table>
 
-<p>Parametr λ<sub>PC</sub> = 0.15 je kalibrován na dolní hranici empirických odhadů pro ČR. Tato konzervativnost odráží empiricky pozorovatelné zploštění Phillipsovy křivky v post-2015 období, přičemž vztah mezi nezaměstnaností a mzdovým tlakem se oslabil, a to nejen v ČR ale globálně (McLeay &amp; Tenreyro 2020).</p>
-
-<div class="callout callout-warn">
-  <div class="callout-title">Dynamický NAIRU</div>
-  Model neodhaduje NAIRU endogenně. Proxy je průměr z prognózovaného horizontu, nikoli strukturální odhad. Pro sofistikovanější kalibraci by bylo vhodné použít Kalmanův filtr pro extrakci trendu nezaměstnanosti (ČNB používá Hodrick-Prescottův filtr s λ = 1600 pro čtvrtletní data).
-</div>
+<p>Zestrmení se aktivuje jen pro kladnou mezeru (napjatý trh, u &lt; NAIRU); pro slabý trh (u_gap &lt; 0) zůstává spodní větev lineární. Toto asymetrické zestrmení je přímo motivované návratem strmé PC v éře post-COVID inflace.</p>
 
 </section>
 
 <!-- ═══════════════════════════════════════════════════════ -->
 <section id="okun">
-<h2>8. Okunův zákon — HDP a nezaměstnanost</h2>
+<h2>12. Okunův zákon (kanál E)</h2>
 
-<p>Okunův zákon specifikuje negativní vztah mezi výstupní mezerou (odchylkou HDP od potenciálu) a mezerou nezaměstnanosti. Model implementuje diferenční verzi:</p>
-
-<div class="eq">
-  <span class="label">(6)</span>
-  Δu<sub>t</sub><sup>Okun</sup> = −β<sub>Okun</sub> · (g<sub>t−1</sub> − ḡ) · Δt
-</div>
-
-<p>kde g<sub>t</sub> je mezikvartální růst HDP (gdp_qoq), ḡ je průměrný mezikvartální růst v prognózovaném horizontu, β<sub>Okun</sub> = 0.4 je Okunův koeficient a efekt nastupuje s lagem 1Q.</p>
-
-<p>Empirické odhady Okunova koeficientu pro ČR se pohybují v rozmezí 0.3–0.6 (Okun 1962 pro USA nalezl 0.5; malé otevřené ekonomiky CE regionu vykazují nižší hodnoty díky větší flexibilitě trhu práce). Zvolená hodnota 0.4 je středem tohoto rozsahu.</p>
-
-</section>
-
-<!-- ═══════════════════════════════════════════════════════ -->
-<section id="poradi">
-<h2>9. Kauzální pořadí a recursive identifikace</h2>
-
-<p>Kritickým designovým rozhodnutím je pořadí výpočtu, implementující Choleského rekurzivní strukturu bez explicitní identifikace pomocí omezení (Sims 1980). Pořadí proměnných reflektuje předpokládanou kauzální strukturu:</p>
-
-<div class="flow">
-  <div class="flow-node">1. HDP</div>
-  <div class="flow-arr">→</div>
-  <div class="flow-node">2. Nezaměstnanost</div>
-  <div class="flow-arr">→</div>
-  <div class="flow-node">3. Mzdy</div>
-  <div class="flow-arr">→</div>
-  <div class="flow-node outcome">4. Inflace</div>
-</div>
-
-<p>Tato rekurzivní struktura předpokládá, že šoky do HDP se v témže čtvrtletí promítají do nezaměstnanosti (Okunův zákon), šoky na trhu práce se promítají do mezd se zpožděním 1Q, a mzdové náklady se promítají do cen se zpožděním 1Q. Inflace je tudíž vždy <em>downstream</em> proměnná, nenastupuje jako příčina v kauzálním řetězci, ale jako výsledek. Toto je standardní rekurzivní identifikace v makroekonomické literatuře (Stock &amp; Watson 2001).</p>
-
-</section>
-
-<!-- ═══════════════════════════════════════════════════════ -->
-<section id="fx">
-<h2>10. Devizové kurzy — Random Walk s driftem</h2>
-
-<p>EUR/CZK a EUR/USD jsou modelovány jako <strong>random walk s driftem</strong>. Tento přístup, ačkoli zdánlivě primitivní, poráží komplexní strukturální modely v krátkodobých prognosách FX kurzů (Meese &amp; Rogoff 1983, replikovaný mnohokrát i pro post-2000 data).</p>
-
-<div class="callout callout-note">
-  <div class="callout-title">Random walk vs. mean reversion — kdy co použít?</div>
-  <p>Model nabízí dvě možnosti:</p>
-  <ul style="margin: 0.5rem 0 0.75rem 1.2rem; line-height: 1.9;">
-    <li><strong>Random walk (default):</strong> Použijte tehdy, kdy nemáte důvod předpokládat fundamentální tlak na kurz v konkrétním směru. Vhodné pro většinu standardních čtvrtletí. Fan chart se rozevírá symetricky kolem aktuálního kurzu.</li>
-    <li><strong>Mean reversion (<code>--eurczk-eq</code>):</strong> Použijte tehdy, kdy existuje veřejně komunikovaný nebo modelově podložený cílový kurz. Příklady kotvení:
-      <ul style="margin: 0.4rem 0 0 1.2rem; line-height: 1.7; font-size: 0.9em;">
-        <li>ČNB historicky komunikuje BEER/FEER rovnovážný kurz. V různých publikacích ČNB byl rovnovážný kurz EUR/CZK odhadován v rozsahu <strong>24–26 CZK</strong> (ČNB, Vývoj rovnovážného měnového kurzu, 2014; aktualizace v inflačních zprávách). Při výrazném odchylce od tohoto rozsahu dává smysl přidat mean reversion.</li>
-        <li>Konsensus analytiků (ČBA, 2025): výhled mírného posílení koruny k 25.0–25.5 CZK/EUR v horizontu 1–2 let díky úrokovému diferenciálu a příznivé obchodní bilanci.</li>
-        <li>Pokud ČNB explicitně komunikuje kurzový závazek (jako v letech 2013–2017 při 27 CZK/EUR), je mean reversion jediná správná volba.</li>
-      </ul>
-    </li>
-  </ul>
-</div>
-
-<div class="eq">
-  <span class="label">(7)</span>
-  s<sub>t+1</sub> = s<sub>t</sub> + μ + σ<sub>RW</sub> · ε<sub>t+1</sub>,&nbsp;&nbsp;&nbsp;ε ~ N(0,1)
-</div>
-
-<p>kde μ je drift odhadnutý jako průměrná čtvrtletní změna za posledních 20 čtvrtletí (5 let) a σ<sub>RW</sub> roste se sqrt(h) pro horizont h čtvrtletí, reflektující martingalovou vlastnost cen aktiv.</p>
-
-<h4>Mean reversion kotvená fundamenty</h4>
-<p>Výchozí random walk předpokládá, že aktuální kurz je nejlepším odhadem budoucího kurzu. Tam kde existuje veřejně dostupný odhad rovnovážného kurzu z fundamentální analýzy (BEER/FEER model ČNB, konsensus analytiků nebo ECB reference rate), je vhodné přejít na Ornstein-Uhlenbeck (OU) proces kotvící prognózu k tomuto fundamentálnímu cíli:</p>
-
-<div class="eq">
-  <span class="label">(8)</span>
-  ds<sub>t</sub> = κ(s̄ − s<sub>t</sub>)dt + σ dW<sub>t</sub>
-</div>
-
-<p>kde κ je rychlost návratu k rovnováze a s̄ je cílový kurz zadaný uživatelem.</p>
-
-</section>
-
-<!-- ═══════════════════════════════════════════════════════ -->
-<section id="pribor">
-<h2>11. PRIBOR 3M — Ornstein-Uhlenbeck mean reversion</h2>
-
-<p>PRIBOR je modelován jako OU proces kolem uživatelsky zadané rovnovážné sazby. Tento přístup je standardní pro modelování krátkodobých úrokových sazeb v blízkosti centrální bankovní sazby (Vasicek 1977):</p>
+<p>Uzavírá zpětnou vazbu z reálné ekonomiky na trh práce: slabší HDP zvyšuje nezaměstnanost:</p>
 
 <div class="eq">
   <span class="label">(9)</span>
-  r<sub>t+1</sub> = r<sub>t</sub> + κ(r* − r<sub>t</sub>) + σ<sub>r</sub> · ε<sub>t+1</sub>
+  Δu<sub>t</sub><sup>Okun</sup> = − β<sub>Okun</sub> · (g<sub>t−1</sub> − ḡ) · 0.25
 </div>
 
-<p>kde κ ∈ [0, 1] je rychlost konvergence (výchozí 0.30 per čtvrtletí, implikující poloperioda návratu ~2 čtvrtletí) a r* je uživatelsky zadaná rovnovážná sazba (výchozí 3.0 %).</p>
+<p>kde g<sub>t</sub> je mezikvartální růst HDP, ḡ jeho průměr v horizontu a β<sub>Okun</sub> = <code>okun_coef</code> = 0.4. Empirické odhady Okunova koeficientu pro ČR leží v rozmezí 0.3 až 0.6; malé otevřené ekonomiky CE regionu vykazují nižší hodnoty díky flexibilnějšímu trhu práce. Zvolená hodnota 0.4 je středem tohoto rozsahu.</p>
 
-<p>Při κ = 0.30 konverguje průměrná prognóza k r* přibližně za 4–6 čtvrtletí. Rozptyl fan chartu roste s vzdáleností od neutrální sazby, v souladu s empirickým pozorováním, že úrokové sazby jsou volatilnější v extrémech cyklu.</p>
+</section>
 
-<div class="callout callout-note">
-  <div class="callout-title">Jak kalibrovat r* a κ (<code>pribor_eq</code>, <code>pribor_speed</code>)?</div>
-  <ul style="margin: 0.4rem 0 0 1.2rem; line-height: 1.9;">
-    <li><strong>Rovnovážná sazba r* (<code>pribor_eq</code>):</strong> Vychází z komunikace ČNB o neutrální repo sazbě minus typický spread PRIBOR–repo (~0.3–0.5 pp). Pokud ČNB ve Zprávě o měnové politice signalizuje konkrétní horizont stabilizace sazeb, použijte odpovídající PRIBOR odečtením spreadu. V dubnu 2026 ČNB ponechala repo na 3.50 % s výhledem stability → r* ≈ 3.0–3.2 %.</li>
-    <li><strong>Rychlost konvergence κ (<code>pribor_speed</code>):</strong> Hodnota 0.30 odpovídá „normálnímu" cyklu. Pro scénář rychlého uvolňování (ČNB aktivně snižuje sazby) zvyšte na 0.40–0.50; pro scénář prolonged restrictive policy snižte na 0.15–0.20. ČNB v zimní prognóze 2025 komunikovala „mírný pokles a pak přibližná stabilita", čemuž odpovídá κ ≈ 0.25–0.30.</li>
-  </ul>
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="ocekavani">
+<h2>13. Inflační očekávání a lepkavé jádro</h2>
+
+<p>Ústřední přídavek verze 2.x. Inflace se nevrací mechanicky k fixnímu 2% cíli, ale k <strong>pomalu se měnícímu jádru</strong> (Stock-Watson 2007), které je tažené domácími náklady. Právě proto model nedává mechanický návrat k cíli a sedí blíž prognózám bank.</p>
+
+<h4>Lepkavé jádro (Stock-Watson trend + Galí-Gertler náklady)</h4>
+<div class="eq">
+  <span class="label">(10)</span>
+  core_anchor<sub>t</sub> = π* + a<sub>W</sub> · max(0, w<sub>t</sub> − w̄) + h,&nbsp;&nbsp;&nbsp;
+  core<sub>t</sub> = ρ · core<sub>t−1</sub> + (1 − ρ) · core_anchor<sub>t</sub>
 </div>
+
+<table>
+  <tr><th>Symbol</th><th>Popis</th><th>Default</th></tr>
+  <tr><td>ρ</td><td>Perzistence jádra, lepkavost služeb a nájmů (<code>core_persistence</code>)</td><td>0.85</td></tr>
+  <tr><td>h</td><td>Tlak nemovitostí a služeb v pp nad cíl (<code>housing_services_pressure</code>)</td><td>0.5</td></tr>
+  <tr><td>a<sub>W</sub></td><td>Přenos nadměrného mzdového růstu do jádra (<code>wage_to_core</code>)</td><td>0.15</td></tr>
+</table>
+
+<p>Počáteční jádro je vyhlazená nedávná inflace (průměr posledních 4 čtvrtletí). Vysoké ρ = 0.85 vyjadřuje lepkavost cen služeb a nájmů (Fuhrer 2011).</p>
+
+<h4>Hybridní novokeynesiánská Phillipsova křivka očekávání</h4>
+<p>Šokovaná inflace v každé simulaci je tažena k očekávání, které se ukotvuje k jádru, ne k cíli:</p>
+
+<div class="eq">
+  <span class="label">(11)</span>
+  π<sup>e</sup><sub>t</sub> = λ · core<sub>t</sub> + (1 − λ) · π<sub>t−1</sub>,&nbsp;&nbsp;&nbsp;
+  π<sub>t</sub> = (1 − γ<sub>f</sub>) · π<sub>t</sub><sup>AR+korekce</sup> + γ<sub>f</sub> · π<sup>e</sup><sub>t</sub>
+</div>
+
+<table>
+  <tr><th>Symbol</th><th>Popis</th><th>Default</th></tr>
+  <tr><td>λ</td><td>Ukotvenost očekávání k jádru (<code>anchoring</code>)</td><td>0.75</td></tr>
+  <tr><td>γ<sub>f</sub></td><td>Váha dopředu hledících očekávání (<code>expect_weight</code>)</td><td>0.35</td></tr>
+</table>
+
+<p>Parametr λ je zároveň hlavní scénářovou pákou: nízké λ znamená de-ukotvená očekávání (inflace se drží nad cílem déle), vysoké λ pevně ukotvená (rychlejší návrat k cíli).</p>
 
 </section>
 
 <!-- ═══════════════════════════════════════════════════════ -->
 <section id="repo">
-<h2>12. Repo sazba ČNB — stochastické Taylorovo pravidlo</h2>
+<h2>14. Repo sazba ČNB — stochastické Taylorovo pravidlo</h2>
 
-<p>Repo sazba je unikátní proměnná v modelu, mění se diskrétně (v krocích 25 bp) a pouze na zasedáních Bankovní rady ČNB (8× ročně, přibližně 2× za čtvrtletí). Model implementuje stochastické Taylorovo pravidlo:</p>
-
-<h4>Taylorova "cílová" sazba</h4>
+<p>Repo sazba se mění diskrétně (kroky 25 bp) a jen na zasedáních bankovní rady (8× ročně, přibližně 2× za čtvrtletí). Model implementuje stochastické Taylorovo pravidlo se setrvačností:</p>
 
 <div class="eq">
-  <span class="label">(10)</span>
-  r<sub>t</sub>* = r̄ + λ<sub>π</sub>(π<sub>t</sub> − π*) + λ<sub>y</sub> · ỹ<sub>t</sub> + η<sub>t</sub>,&nbsp;&nbsp;&nbsp;η ~ N(0, 0.15²)
+  <span class="label">(12)</span>
+  r<sub>t</sub>* = r̄ + λ<sub>π</sub>(π<sub>t</sub> − π*) + λ<sub>y</sub> ỹ<sub>t</sub>,&nbsp;&nbsp;&nbsp;
+  r<sub>t</sub>* ← ρ · r<sub>t−1</sub> + (1 − ρ) r<sub>t</sub>* + η<sub>t</sub>,&nbsp;&nbsp;&nbsp;η ~ N(0, 0.15²)
 </div>
 
-<p>kde r̄ = 3.5 % je neutrální repo sazba, λ<sub>π</sub> = 1.5 je Taylor princip (koeficient musí být > 1 pro stabilizaci inflace — Blanchard &amp; Kahn 1980), λ<sub>y</sub> = 0.5 je citlivost na výstupní mezeru, ỹ<sub>t</sub> je HDP gap (odchylka od průměru horizontu) a η<sub>t</sub> je stochastická složka zachycující nejistotu rozhodnutí.</p>
+<table>
+  <tr><th>Symbol</th><th>Popis</th><th>Default</th></tr>
+  <tr><td>r̄</td><td>Neutrální / cílová repo sazba (<code>neutral_rate</code>)</td><td>3.5 %</td></tr>
+  <tr><td>λ<sub>π</sub></td><td>Taylor princip, koef. na inflaci (<code>lambda_pi</code>)</td><td>1.5</td></tr>
+  <tr><td>λ<sub>y</sub></td><td>Citlivost na výstupní mezeru (<code>lambda_y</code>)</td><td>0.5</td></tr>
+  <tr><td>ρ</td><td>Setrvačnost sazeb (<code>smoothing</code>): 0 baseline, 0.7 scénáře</td><td>0.0 / 0.7</td></tr>
+</table>
 
-<h4>Rozhodovací pravidlo</h4>
-
-<p>ČNB změní sazbu v čtvrtletí t s pravděpodobností:</p>
-
-<div class="eq">
-  <span class="label">(11)</span>
-  P(Δrepo ≠ 0) = p<sub>0</sub> · min(1, |r<sub>t</sub>* − r<sub>t</sub>| / 0.5)
-</div>
-
-<p>kde p<sub>0</sub> = 0.45 je baseline pravděpodobnost změny a 0.5 pp je normalizační vzdálenost. Pokud k změně dojde, proběhne v směru r<sub>t</sub>* v krocích n × 25 bp, kde n = max(1, round(|r<sub>t</sub>* − r<sub>t</sub>| / 0.25)).</p>
-
-<p>Tato specifikace generuje schodovitou trajektorii repo sazby s realistickým chováním inertie a diskrétních skoků. Jsou to vlastnosti, které plynulé AR nebo OU procesy nemohou zachytit.</p>
+<p>ČNB změní sazbu v čtvrtletí s pravděpodobností P = 0.45 · min(1, |r* − r| / 0.5). Pokud ke změně dojde, proběhne v krocích n × 25 bp směrem k r* (max 100 bp najednou), s nulovou spodní hranicí. Tak vzniká realistická schodovitá trajektorie s inercí a diskrétními skoky, kterou plynulé AR ani OU procesy nezachytí.</p>
 
 <div class="callout callout-note">
-  <div class="callout-title">Jak nastavit neutrální repo sazbu (<code>repo_neutral</code>)?</div>
-  <p>Neutrální repo sazba r̄ = 3.5 % (výchozí) odpovídá implicitnímu konsensu ČNB pro střednědobou stabilizaci. Zdůvodnění:</p>
-  <ul style="margin: 0.5rem 0 0.75rem 1.2rem; line-height: 1.9;">
-    <li><strong>Bankovní rada ČNB (7. 5. 2025):</strong> ČNB snížila repo na 3.50 % a <em>zastavila</em> cyklus snižování — Zpráva o měnové politice léto 2025 komunikovala „mírný pokles sazeb a pak jejich lehký nárůst v příštím roce". To implikuje, že 3.5 % je blízko vnímané neutrální sazbě.</li>
-    <li><strong>Konzervativní scénář:</strong> Pokud věříte, že ČNB bude nadále opatrná (obava z inflační setrvačnosti, jak zdůraznil guvernér Michl), nastavte r̄ = 3.50–3.75 %.</li>
-    <li><strong>Akomodativní scénář:</strong> Pokud očekáváte rychlejší pokles (konvergence k eurozóně, slabší ekonomika), nastavte r̄ = 3.0–3.25 %, v souladu s konsensem ČBA předpokládajícím stabilizaci na 3.0–3.25 % do roku 2027.</li>
+  <div class="callout-title">Dva režimy: anchor_to_neutral</div>
+  <ul>
+    <li><strong>Baseline (<code>anchor_to_neutral = True</code>):</strong> uživatel zadává cílovou steady-state sazbu; model odečte inflační prémii (r̄ = neutral_rate − λ<sub>π</sub>(π̄ − π*)), takže repo konverguje přesně k zadanému <code>neutral_rate</code>.</li>
+    <li><strong>Scénáře (<code>anchor_to_neutral = False</code>):</strong> r̄ je skutečná neutrální sazba a Taylor reaguje na plnou úroveň inflace. Inflačnější scénář tak endogenně znamená vyšší sazby. Setrvačnost ρ = 0.7 (inertní Taylor, Clarida-Galí-Gertler 2000).</li>
   </ul>
 </div>
 
 <div class="callout callout-note">
-  <div class="callout-title">Taylor princip a determinace rovnováhy</div>
-  Podmínka λ<sub>π</sub> > 1 (Taylor princip) je nutná pro lokální determinaci rovnováhy v NKM modelech (Woodford 2003). Při λ<sub>π</sub> &lt; 1 by existovalo kontinuum rovnovážných inflačních trajektorií (sunspot equilibria). Kalibrovaná hodnota 1.5 odpovídá Taylorově (1993) původnímu návrhu a je standardem v literatuře.
+  <div class="callout-title">Taylor princip</div>
+  Podmínka λ<sub>π</sub> &gt; 1 je nutná pro lokální determinaci rovnováhy v NK modelech (Woodford 2003). Při λ<sub>π</sub> &lt; 1 by existovalo kontinuum inflačních trajektorií (sunspot equilibria). Hodnota 1.5 odpovídá Taylorovu (1993) původnímu návrhu.
+</div>
+
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="pribor">
+<h2>15. PRIBOR — navázaný na repo cestu</h2>
+
+<p>PRIBOR 3M není samostatný proces mířící k pevné konstantě. Je to očekávaný průměr repo sazby plus rozpětí (term a likviditní prémie). Model ho vede jako Ornstein-Uhlenbeck návrat k <strong>časově proměnnému cíli</strong> odvozenému z repo cesty:</p>
+
+<div class="eq">
+  <span class="label">(13)</span>
+  target<sub>t</sub> = repo_path<sub>t</sub> + spread,&nbsp;&nbsp;&nbsp;
+  r<sub>t+1</sub> = r<sub>t</sub> + κ · (target<sub>t</sub> − r<sub>t</sub>) + σ · ε<sub>t+1</sub>
+</div>
+
+<p>kde κ = <code>speed</code> = 0.30 je rychlost konvergence a spread je průměr rozdílu (PRIBOR − repo) za posledních 8 čtvrtletí překryvu. PRIBOR tak kopíruje repo hrb místo míření k fixní hodnotě. PRIBOR 12M využívá stejnou logiku, ale preferuje tržně implikovanou prognózu z <code>fin_intervals.json</code> (ČNB delší splatnosti), pokud je dostupná.</p>
+
+<div class="callout callout-warn">
+  <div class="callout-title">Sigma z posledních 8 čtvrtletí</div>
+  Rozptyl PRIBOR se odhaduje na posledních 8 čtvrtletích, ne na celém vzorku. Cyklus 2021 až 2024 (skok z nuly na 7 %) by ho jinak nafoukl a rozbil konvergenci fan chartu.
 </div>
 
 </section>
 
 <!-- ═══════════════════════════════════════════════════════ -->
 <section id="unempl">
-<h2>13. Nezaměstnanost — mean reversion k strukturální míře</h2>
+<h2>16. Nezaměstnanost — NAIRU plus měnová restrikce</h2>
 
-<p>Mimo Okunovu korekci (viz sekce 8) podléhá nezaměstnanost autonomní mean reverzí k průměru posledních 3 let, která slouží jako proxy pro strukturální míru (NAIRU). Rychlost návratu κ<sub>u</sub> = 0.20 per čtvrtletí implikuje, že přibližně 20 % odchylky od NAIRU se eliminuje každé čtvrtletí, s poloperiodou návratu ~3 čtvrtletí.</p>
+<p>Trh práce se vrací k strukturální míře (NAIRU), ale restriktivní měnová politika (repo nad neutrálem) ekonomiku chladí a tlačí nezaměstnanost nad NAIRU. Nejde tedy o mechanickou regresi k průměru bez ekonomiky:</p>
 
-<p>Tento přístup zachycuje empiricky pozorovanou tendenci nezaměstnanosti vracet se k nízkofrekvečnímu trendu v horizontu 2–4 let, při zachování krátkodobé variability zachycené AR jádrem.</p>
+<div class="eq">
+  <span class="label">(14)</span>
+  u_target<sub>t</sub> = NAIRU + s<sub>P</sub> · max(0, repo<sub>t</sub> − r̄),&nbsp;&nbsp;&nbsp;
+  u<sub>t+1</sub> = u<sub>t</sub> + κ<sub>u</sub> · (u_target<sub>t</sub> − u<sub>t</sub>) + σ · ε<sub>t+1</sub>
+</div>
+
+<table>
+  <tr><th>Symbol</th><th>Popis</th><th>Default</th></tr>
+  <tr><td>NAIRU</td><td>Strukturální míra = medián posledních 12Q</td><td>≈ z dat</td></tr>
+  <tr><td>κ<sub>u</sub></td><td>Rychlost návratu k cíli (<code>speed</code>)</td><td>0.20</td></tr>
+  <tr><td>s<sub>P</sub></td><td>Citlivost na restrikci (<code>policy_sensitivity</code>)</td><td>0.10</td></tr>
+</table>
+
+<p>NAIRU je odhadnutá robustně jako medián posledních 12 čtvrtletí (při velmi napjatém trhu je blízko nedávného minima). Citlivost s<sub>P</sub> = 0.10 je klíčovým příkladem kalibrace backtestem, ne odhadem (viz sekce 18): hodnota 0.30 byla trojnásobně přestřelená (Theil U = 1.38), správná je 0.10 (U = 0.66). Český trh práce reaguje na sazby jen slabě.</p>
+
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="fx">
+<h2>17. Devizové kurzy — random walk s driftem</h2>
+
+<p>EUR/CZK a EUR/USD jsou modelovány jako random walk s driftem. Přístup zdánlivě primitivní, ale v krátkodobých FX prognózách poráží komplexní strukturální modely (Meese &amp; Rogoff 1983, opakovaně replikováno i pro post-2000 data):</p>
+
+<div class="eq">
+  <span class="label">(15)</span>
+  s<sub>t+1</sub> = s<sub>t</sub> + μ + σ · ε<sub>t+1</sub>,&nbsp;&nbsp;&nbsp;ε ~ N(0, 1)
+</div>
+
+<p>kde μ je drift odhadnutý jako průměrná čtvrtletní změna za posledních 20 čtvrtletí. Volitelně lze zapnout mean reversion k fundamentálnímu cíli (BEER/FEER odhad ČNB, konsensus analytiků). Backtest potvrzuje, že kurzy prohrávají s random walkem <em>očekávaně</em> (EUR/CZK Theil U = 1.28, EUR/USD = 1.18), což je přímý důsledek Meese-Rogoff a není to vada modelu.</p>
 
 </section>
 
 <!-- ═══════════════════════════════════════════════════════ -->
 <section id="fan-charts">
-<h2>14. Fan charty a Monte Carlo inference</h2>
+<h2>18. Fan charty a Monte Carlo inference</h2>
 
-<p>Pro každou prognózovanou proměnnou model generuje n = 2 000 Monte Carlo simulačních cest (paths). Z těchto cest jsou odvozeny empirické percentily pro vizualizaci fan chartů:</p>
+<p>Pro každou proměnnou model generuje n = 2000 simulačních cest. Z nich se odvodí empirické percentily:</p>
 
 <table>
   <tr><th>Pásmo</th><th>Percentily</th><th>Interpretace</th></tr>
-  <tr><td>90% interval</td><td>5. – 95. percentil</td><td>Hrubé ohraničení „extrémních" scénářů</td></tr>
-  <tr><td>50% interval</td><td>25. – 75. percentil</td><td>Střední scénář (mezikvartilové rozpětí)</td></tr>
+  <tr><td>90% interval</td><td>5. – 95. percentil</td><td>Ohraničení extrémnějších scénářů</td></tr>
+  <tr><td>50% interval</td><td>25. – 75. percentil</td><td>Mezikvartilové rozpětí</td></tr>
   <tr><td>Medián</td><td>50. percentil</td><td>Centrální prognóza</td></tr>
 </table>
 
-<p>Volba percentilů (5/25/50/75/95) je záměrně symetrická, model nepředpokládá asymetrii v rozdělení rizik. Pro asymetrické fan charty (jako ČNB) by bylo nutné explicitně modelovat pravostranná nebo levostranná rizika pomocí tilted distributions nebo scenario analysis.</p>
+<p>Grafy dodržují MUP identitu (navy <code>#00205B</code>, modrá <code>#003DA5</code>, pozadí <code>#EEF2FA</code>), s šedým pásem pro COVID (Q1 až Q3 2020). Sketch varianta (<code>sketch_report.py</code>) používá bílé pozadí a font American Typewriter.</p>
 
-<div class="callout callout-note">
-  <div class="callout-title">Konzistence simulačních cest napříč proměnnými</div>
-  Aktuální implementace generuje cesty pro každou proměnnou nezávisle, sdílené šoky nejsou plně korelovány; výjimkou je deterministic correction z DSGE vazeb, která je konzistentní. Plná konzistence by vyžadovala simultánní simulaci vektoru šoků s odhadnutou korelační maticí reziduí (Var-Covar matice).
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="scenare">
+<h2>19. Scénáře</h2>
+
+<p><code>scenarios.py</code> počítá tři scénáře, které se liší ukotveností očekávání λ a domácím cenovým tlakem h. Každý scénář projde plnou fixed-point iterací (inflace → repo Taylor → navázaný PRIBOR → finální inflace), přičemž repo běží v režimu <code>anchor_to_neutral = False</code>, takže sazby reagují na úroveň inflace.</p>
+
+<table>
+  <tr><th>Scénář</th><th>anchoring λ</th><th>housing_pressure h</th><th>Interpretace</th></tr>
+  <tr><td>Základní</td><td>0.75</td><td>0.5 pp</td><td>Výchozí kalibrace</td></tr>
+  <tr><td>De-ukotvená</td><td>0.55</td><td>1.2 pp</td><td>Vyšší setrvačnost, silnější tlak služeb a nemovitostí</td></tr>
+  <tr><td>Ukotvená</td><td>0.92</td><td>0.1 pp</td><td>Pevně ukotvená očekávání, rychlý návrat k cíli</td></tr>
+</table>
+
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="backtest">
+<h2>20. Backtest — out-of-sample validace (Theil U)</h2>
+
+<p>Kalibrace se neopírá o odhad, ale o out-of-sample backtest (<code>backtest.py</code>). Kritériem je <strong>Theil U</strong>: U &lt; 1 znamená, že model poráží naivní random walk, U &gt; 1 že prohrává. Aktuální výsledky (v2.5, horizont 4Q):</p>
+
+<table>
+  <tr><th>Proměnná</th><th>Theil U (4Q)</th><th>Proměnná</th><th>Theil U (4Q)</th></tr>
+  <tr><td>repo_rate</td><td><strong>0.46</strong></td><td>hicp_yoy</td><td>0.64</td></tr>
+  <tr><td>unempl</td><td>0.52</td><td>gdp_qoq</td><td>0.79</td></tr>
+  <tr><td>cpi_yoy</td><td>0.59</td><td>gdp_yoy</td><td>0.86</td></tr>
+  <tr><td>pribor3m</td><td>0.59</td><td>wages_yoy</td><td>0.90</td></tr>
+  <tr><td>eurczk</td><td>1.28</td><td>eurusd</td><td>1.18</td></tr>
+</table>
+
+<p>8 z 10 proměnných poráží random walk. Kurzy prohrávají očekávaně (Meese-Rogoff). Grid search přes kalibrační parametry probíhá právě přes <code>backtest.py</code>.</p>
+
+<div class="callout callout-warn">
+  <div class="callout-title">Backtest musí testovat PRODUKČNÍ modely</div>
+  Backtest jednou testoval zastaralé verze funkcí a tvářil se dobře. Při každé změně modelu je nutné zkontrolovat <code>_forecast_at()</code> v <code>backtest.py</code>, jestli volá totéž co produkce (včetně defaultních hodnot parametrů). Jinak backtest validuje kód, který se nepublikuje.
 </div>
+
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="dekompozice">
+<h2>21. Dekompozice inflace</h2>
+
+<p>Funkce <code>inflation_decomposition()</code> rozkládá inflační prognózu na příspěvky jednotlivých kanálů tak, že model opakovaně spustí s vypnutým vždy jedním kanálem a měří rozdíl vůči plnému běhu. Například příspěvek ERPT se izoluje během s <code>erpt_coef = 0.0</code>. Výstupem je vodopádový graf ukazující, kolik z odchylky inflace od cíle jde na vrub mzdám, kurzu, měnové politice a lepkavému jádru.</p>
 
 </section>
 
 <!-- ═══════════════════════════════════════════════════════ -->
 <section id="parametry">
-<h2>15. Parametry, kalibrace a nastavitelné vstupy</h2>
+<h2>22. Parametry a kalibrace</h2>
 
 <table>
-  <tr><th>Parametr</th><th>Symbol</th><th>Default</th><th>Nastavitelný</th><th>Citlivost modelu</th></tr>
-  <tr><td>pribor_eq</td><td>r*</td><td>3.0 %</td><td>✓ CLI</td><td>Vysoká, určuje inflační konvergenci</td></tr>
-  <tr><td>pribor_speed</td><td>κ</td><td>0.30</td><td>✓ CLI</td><td>Střední, ovlivňuje rychlost normalizace</td></tr>
-  <tr><td>repo_neutral</td><td>r̄</td><td>3.5 %</td><td>✓ CLI</td><td>Střední — kotvení Taylorova pravidla</td></tr>
-  <tr><td>mp_sensitivity</td><td>λ<sub>MP</sub></td><td>0.25</td><td>Kód</td><td>Vysoká — síla dezinflačního tlaku</td></tr>
-  <tr><td>mp_lag</td><td>L</td><td>4 Q</td><td>Kód</td><td>Vysoká — délka transmisního lagu</td></tr>
-  <tr><td>phillips_slope</td><td>λ<sub>PC</sub></td><td>0.15</td><td>Kód</td><td>Střední — mzdová dynamika</td></tr>
-  <tr><td>okun_coef</td><td>β<sub>Okun</sub></td><td>0.40</td><td>Kód</td><td>Nízká — trh práce je smooth</td></tr>
-  <tr><td>wages_infl_pass</td><td>λ<sub>W</sub></td><td>0.08</td><td>Kód</td><td>Střední — cost-push inflace</td></tr>
-  <tr><td>inflation_target</td><td>π*</td><td>2.0 %</td><td>Kód</td><td>Střední — nominální kotva</td></tr>
-  <tr><td>n_sims</td><td>—</td><td>2 000</td><td>Kód</td><td>Nízká — vliv na šířku pásem</td></tr>
-  <tr><td>steps</td><td>h</td><td>8 Q</td><td>Kód</td><td>—</td></tr>
+  <tr><th>Parametr</th><th>Symbol</th><th>Default</th><th>Kanál</th><th>Zdroj kalibrace</th></tr>
+  <tr><td>neutral_rate (MP)</td><td>r̄</td><td>3.0 %</td><td>A</td><td>Komunikace ČNB</td></tr>
+  <tr><td>mp_sensitivity</td><td>λ<sub>MP</sub></td><td>0.25</td><td>A</td><td>Literatura + backtest</td></tr>
+  <tr><td>mp_lag</td><td>L</td><td>4 Q</td><td>A</td><td>Christiano et al. (1999)</td></tr>
+  <tr><td>real_neutral</td><td>r*</td><td>1.0 %</td><td>A0</td><td>Odhad ČNB</td></tr>
+  <tr><td>is_sensitivity</td><td>κ<sub>IS</sub></td><td>0.05</td><td>A0</td><td>ČNB-style, koherence</td></tr>
+  <tr><td>potential_gdp_qoq</td><td>ḡ<sub>pot</sub></td><td>0.55 %</td><td>C</td><td>Potenciál ČR ~2.2 % p.a.</td></tr>
+  <tr><td>wage_norm</td><td>w̄</td><td>4.0 %</td><td>B</td><td>Cíl + produktivita</td></tr>
+  <tr><td>wages_infl_pass</td><td>λ<sub>W</sub></td><td>0.08</td><td>B</td><td>ČNB (2019)</td></tr>
+  <tr><td>phillips_slope</td><td>λ<sub>PC</sub></td><td>0.15</td><td>D</td><td>Dolní hranice odhadů ČR</td></tr>
+  <tr><td>phillips_convexity</td><td>c<sub>PC</sub></td><td>0.8</td><td>D</td><td>Benigno-Eggertsson (2023)</td></tr>
+  <tr><td>nairu</td><td>NAIRU</td><td>2.8 %</td><td>D</td><td>Z dat (medián 20Q)</td></tr>
+  <tr><td>okun_coef</td><td>β<sub>Okun</sub></td><td>0.4</td><td>E</td><td>Střed odhadů ČR</td></tr>
+  <tr><td>erpt_coef</td><td>β<sub>E</sub></td><td>0.15</td><td>C2</td><td>ERPT literatura</td></tr>
+  <tr><td>erpt_state</td><td>φ<sub>E</sub></td><td>0.02</td><td>C2</td><td>Stavová závislost</td></tr>
+  <tr><td>core_persistence</td><td>ρ</td><td>0.85</td><td>jádro</td><td>Fuhrer (2011)</td></tr>
+  <tr><td>anchoring</td><td>λ</td><td>0.75</td><td>očekávání</td><td>CLI, scénářová páka</td></tr>
+  <tr><td>expect_weight</td><td>γ<sub>f</sub></td><td>0.35</td><td>očekávání</td><td>Hybridní NKPC</td></tr>
+  <tr><td>housing_services_pressure</td><td>h</td><td>0.5 pp</td><td>jádro</td><td>CLI, scénářová páka</td></tr>
+  <tr><td>repo_neutral (Taylor)</td><td>r̄</td><td>3.5 %</td><td>repo</td><td>CLI</td></tr>
+  <tr><td>lambda_pi</td><td>λ<sub>π</sub></td><td>1.5</td><td>repo</td><td>Taylor (1993)</td></tr>
+  <tr><td>policy_sensitivity</td><td>s<sub>P</sub></td><td>0.10</td><td>unempl</td><td><strong>Backtest</strong> (0.30→0.10)</td></tr>
+  <tr><td>n_sims</td><td>—</td><td>2000</td><td>—</td><td>Šířka pásem</td></tr>
+  <tr><td>steps</td><td>h</td><td>8 Q</td><td>—</td><td>Horizont</td></tr>
 </table>
+
+<p>Parametry s poznámkou CLI lze nastavit z příkazové řádky (<code>--anchoring</code>, <code>--repo-neutral</code>, <code>--phillips-convexity</code>, <code>--erpt-coef</code> a další), ostatní jsou v kódu.</p>
+
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="zasady">
+<h2>23. Zásady a známé pasti</h2>
+
+<div class="callout callout-note">
+  <div class="callout-title">Čtyři zásady, na kterých se trvá</div>
+  <ul>
+    <li><strong>Baseline kanálu vždy z fixní reference, nikdy z průměru prognózní cesty.</strong> Jinak se kanál vynuluje sám vůči sobě (chyba se objevila u kanálů B, C, D).</li>
+    <li><strong>Kalibrovat backtestem, ne odhadem.</strong> Kritériem je Theil U přes grid v <code>backtest.py</code>.</li>
+    <li><strong>Backtest musí testovat produkční modely</strong> včetně defaultních hodnot parametrů.</li>
+    <li><strong>Poctivost nad hezká čísla.</strong> Když kanál nezlepšuje predikci (IS puzzle), řekne se to a zdůvodní, proč ho přesto nechat (strukturální koherence, scénáře).</li>
+  </ul>
+</div>
+
+<div class="callout callout-warn">
+  <div class="callout-title">Známé pasti implementace</div>
+  <ul>
+    <li><code>_extend_to_present()</code> volat na každou řadu <em>před</em> spojením a <code>dropna()</code>, jinak se ztratí nejnovější data.</li>
+    <li><code>ax.get_ylim()</code> až po vykreslení dat, jinak se rozbije umístění popisků.</li>
+    <li>PRIBOR sigma z posledních 8 čtvrtletí, ne z celého vzorku.</li>
+    <li><code>os.path.abspath(__file__)</code>, ne <code>realpath</code> (rozbalil by Dropbox symlink).</li>
+    <li>Aktualizovat všechny soubory najednou: novější skript nesmí volat funkci, kterou starší soubor nemá.</li>
+  </ul>
+</div>
 
 </section>
 
 <!-- ═══════════════════════════════════════════════════════ -->
 <section id="limity">
-<h2>16. Limity a předpoklady modelu</h2>
+<h2>24. Limity a předpoklady</h2>
 
 <div class="callout callout-limit">
-  <div class="callout-title">1. Linearita</div>
-  Všechny vztahy jsou lineární — model nedokáže zachytit asymetrie (např. inflace reaguje jinak na pozitivní vs. negativní poptávkové šoky), prahové efekty ani nelinearity v transmisi měnové politiky (efektivní nulová spodní hranice sazeb).
+  <div class="callout-title">1. Lineární jádro</div>
+  Kromě konvexní Phillipsovy křivky (D) a stavově závislého ERPT (C2) jsou vztahy lineární. Model nezachytí prahové efekty ani nelinearitu transmise u efektivní nulové spodní hranice sazeb (byť ZLB je ve výpočtu repo respektována).
 </div>
 
 <div class="callout callout-limit">
   <div class="callout-title">2. Parametrická stabilita</div>
-  AR koeficienty jsou odhadnuty jako konstantní přes celý vzorek. Strukturální zlomy (vstup ČR do eurozóny, COVID-19, energetický šok 2022) mohou způsobit nestabilitu parametrů. Model neimplementuje time-varying parameter (TVP) specifikaci.
+  AR koeficienty jsou konstantní přes celý vzorek. Strukturální zlomy (COVID-19, energetický šok 2022) mohou způsobit nestabilitu. Model neimplementuje time-varying parameters.
 </div>
 
 <div class="callout callout-limit">
-  <div class="callout-title">3. Absence rovnováhy</div>
-  Model není DSGE — neexistuje žádná explicitní steady-state ani optimalizační chování agentů. Kalibrované parametry jsou "redukovaná forma" strukturálních vztahů, nikoli strukturální parametry hluboké ekonomiky. Nelze je tudíž interpretovat jako invariantní k politickým změnám (Lucasova kritika).
+  <div class="callout-title">3. Redukovaná forma, ne strukturální parametry</div>
+  Kalibrované koeficienty jsou redukovaná forma strukturálních vztahů, ne hluboké parametry preferencí a technologie. Nelze je interpretovat jako invariantní k politickým změnám (Lucasova kritika).
 </div>
 
 <div class="callout callout-limit">
-  <div class="callout-title">4. Otevřená ekonomika</div>
-  Model zachycuje vnější svět pouze nepřímo přes EUR/USD a EUR/CZK. Chybí explicitní modelování zahraničního obchodu, exportní poptávky, dovozní inflace ani spill-over efektů z eurozóny (ECB rozhodnutí vstupují jen přes PRIBOR spread).
+  <div class="callout-title">4. Otevřená ekonomika jen přes kurz</div>
+  Vnější svět vstupuje do modelu jen přes EUR/CZK (kanál ERPT) a EUR/USD. Chybí explicitní zahraniční obchod, exportní poptávka i spill-over z eurozóny (ECB rozhodnutí vstupují jen přes PRIBOR spread).
 </div>
 
 <div class="callout callout-limit">
-  <div class="callout-title">5. Fiskální sektor</div>
-  Model neobsahuje žádný fiskální blok. Vládní výdaje, daňová politika ani dluh nefigurují jako endogenní proměnné. Fiskální impulzy jsou zachyceny pouze nepřímo přes HDP data.
+  <div class="callout-title">5. Bez fiskálního bloku</div>
+  Vládní výdaje, daně ani dluh nefigurují jako endogenní proměnné. Fiskální impulzy jsou zachyceny jen nepřímo přes HDP.
 </div>
 
 <div class="callout callout-limit">
-  <div class="callout-title">6. Šoková struktura</div>
-  Šoky jsou i.i.d. normální — model neumí generovat fat-tailed events ani persistentní šoky (např. trvalé zvýšení cen energií). Pro zachycení heavy tails by bylo vhodné použít t-distribuci nebo explicitní scénářové simulace.
+  <div class="callout-title">6. Šoky i.i.d. normální, nekorelované napříč proměnnými</div>
+  Simulační cesty jsou generovány pro každou proměnnou zvlášť; sdílené šoky nejsou plně korelované (konzistentní je jen deterministická korekce z vazeb). Plná konzistence by vyžadovala simultánní simulaci vektoru šoků s odhadnutou kovarianční maticí reziduí. Šoky navíc neumí generovat těžké chvosty ani trvale persistentní posuny (např. permanentní energetický šok).
 </div>
 
 </section>
 
 <!-- ═══════════════════════════════════════════════════════ -->
 <section id="literatura">
-<h2>17. Klíčová literatura</h2>
+<h2>25. Klíčová literatura</h2>
 
 <table>
   <tr><th>Reference</th><th>Relevance pro model</th></tr>
-  <tr><td>Taylor (1993)</td><td>Taylorovo pravidlo měnové politiky — základ pro repo sazbu</td></tr>
-  <tr><td>Okun (1962)</td><td>Empirický zákon HDP–nezaměstnanost</td></tr>
-  <tr><td>Blanchard &amp; Kahn (1980)</td><td>Podmínky determinace rovnováhy (Taylor princip)</td></tr>
-  <tr><td>Vasicek (1977)</td><td>Ornstein-Uhlenbeck pro úrokové sazby — základ PRIBOR modelu</td></tr>
-  <tr><td>Meese &amp; Rogoff (1983)</td><td>Zdůvodnění random walk pro FX kurzy</td></tr>
-  <tr><td>Christiano et al. (1999)</td><td>Lags měnové politiky — identifikace pomocí SVARu</td></tr>
-  <tr><td>Gali &amp; Gertler (1999)</td><td>Nová Phillipsova křivka s forward-looking složkou</td></tr>
-  <tr><td>Woodford (2003)</td><td>Interest and Prices — kompletní NKM framework</td></tr>
-  <tr><td>McLeay &amp; Tenreyro (2020)</td><td>Zploštění Phillipsovy křivky — empirická evidence</td></tr>
-  <tr><td>Holston, Laubach &amp; Williams (2017)</td><td>Odhady r* pro vyspělé ekonomiky</td></tr>
-  <tr><td>Sims (1980)</td><td>VAR jako reduced-form systémy a rekurzivní identifikace</td></tr>
-  <tr><td>Stock &amp; Watson (2001)</td><td>VAR v makroekonomii — přehled metod</td></tr>
-  <tr><td>ČNB (2019)</td><td>Výroční zpráva o měnové politice — empirické odhady pro ČR</td></tr>
-  <tr><td>Benigno &amp; Eggertsson (2023, NBER WP 31197)</td><td>Nelineární Phillipsova křivka v éře post-COVID inflace — klíčová reference pro pochopení, proč model záměrně neimplementuje nelinearitu v základním scénáři</td></tr>
-  <tr><td>ČNB (2024)</td><td>„Phillipsova křivka: nová doba nelineární?" — ČNBlog, říjen 2024. Přímá analýza platnosti PC pro ČR s odkazem na hybridní NKP křivku a zestrmení post-2021</td></tr>
-  <tr><td>Hazzell et al. (2022, QJE)</td><td>Identifikace sklonu Phillipsovy křivky pomocí regionálních dat USA — odhad κ ≈ 0.34 pp inflace na 1 pp pokles nezaměstnanosti, blízký naší kalibraci</td></tr>
-  <tr><td>Hagedorn (2023)</td><td>Fiskální determinanty inflace mimo rámec mezní náklady — relevantní pro interpretaci inflačního šoku 2021–2023 v ČR</td></tr>
-  <tr><td>ČNB, Zpráva o měnové politice – léto 2025</td><td>Komunikace ČNB o neutrální sazbě a výhledu PRIBOR — základ pro kalibraci r* a r̄</td></tr>
-  <tr><td>ČBA Prognóza (srpen 2025)</td><td>Konsensus analytiků — odhady HDP, inflace, sazeb ČNB a EUR/CZK; srovnávací benchmark pro kalibraci parametrů</td></tr>
+  <tr><td>Galí (2015)</td><td>Monetary Policy, Inflation, and the Business Cycle — tříravnicové NK jádro, dynamická IS křivka (kanál A0)</td></tr>
+  <tr><td>Clarida, Galí &amp; Gertler (1999)</td><td>The Science of Monetary Policy — NK framework, IS a Taylorovo pravidlo</td></tr>
+  <tr><td>Clarida, Galí &amp; Gertler (2000)</td><td>Inertní Taylorovo pravidlo se setrvačností sazeb (parametr smoothing)</td></tr>
+  <tr><td>Galí &amp; Gertler (1999)</td><td>Novokeynesiánská Phillipsova křivka s náklady práce — kanály B a jádro</td></tr>
+  <tr><td>Benigno &amp; Eggertsson (2023)</td><td>Nelineární (konvexní) Phillipsova křivka v éře post-COVID inflace — kanál D</td></tr>
+  <tr><td>Stock &amp; Watson (2007)</td><td>Why Has U.S. Inflation Become Harder to Forecast — lepkavý inflační trend, jádro</td></tr>
+  <tr><td>Fuhrer (2011)</td><td>Perzistence inflace, lepkavost služeb a nájmů — kalibrace ρ</td></tr>
+  <tr><td>Ball et al. (IMF 2023)</td><td>Ukotvení očekávání k jádru místo k cíli — kanál očekávání</td></tr>
+  <tr><td>Christiano, Eichenbaum &amp; Evans (1999)</td><td>Lags měnové politiky, identifikace přes SVAR — kanál A</td></tr>
+  <tr><td>Taylor (1993)</td><td>Discretion versus Policy Rules — základ Taylorova pravidla pro repo</td></tr>
+  <tr><td>Woodford (2003)</td><td>Interest and Prices — determinace rovnováhy, Taylor princip</td></tr>
+  <tr><td>Okun (1962)</td><td>Empirický vztah HDP a nezaměstnanosti — kanál E</td></tr>
+  <tr><td>Meese &amp; Rogoff (1983)</td><td>Random walk poráží strukturální modely v FX — kurzový blok</td></tr>
+  <tr><td>ČNB, Zprávy o měnové politice</td><td>Komunikace o neutrální sazbě a výhledu PRIBOR — kalibrace r̄ a r*</td></tr>
 </table>
 
 </section>
 
 <div class="footnote">
-  <p><strong>NOSTRADAMUP Dokumentace v2.0</strong> · Metropolitní univerzita Praha · 2026</p>
-  <p>Implementace: Python 3.12 / pandas / numpy / matplotlib. Zdrojový kód dostupný v rámci interní repozitáře MUP.</p>
-  <p>Tato dokumentace popisuje <em>aktuální stav</em> implementace — model je živý projekt a paramety i struktura se vyvíjejí. Vždy zkontrolujte zdrojový kód pro přesné specifikace.</p>
+  <p><strong>NOSTRADAMUP — Technická dokumentace v2.5</strong> · Metropolitní univerzita Praha · 2026</p>
+  <p>Implementace: Python 3.11 (pandas, numpy, matplotlib). Zdrojový kód: <code>report_generator.py</code> (jádro <code>ar_forecast</code>), <code>financial_data.py</code> (finanční blok), <code>scenarios.py</code>, <code>backtest.py</code>, <code>export_web.py</code>.</p>
+  <p>Dokumentace popisuje <em>aktuální stav</em> implementace. Model je živý projekt; parametry i struktura se vyvíjejí. Pro přesnou specifikaci vždy zkontrolujte zdrojový kód a soubor <code>CLAUDE.md</code>.</p>
 </div>
 
 </main>
