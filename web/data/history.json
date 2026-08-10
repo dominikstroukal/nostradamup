@@ -1,15 +1,15 @@
 [
  {
   "vintage": "2026-Q3",
-  "generated": "2026-08-08",
+  "generated": "2026-08-10",
   "headline": {
-   "inflace_1y": 2.8,
-   "inflace_3y": 2.7,
+   "inflace_1y": 2.4,
+   "inflace_3y": 2.5,
    "cil": 2.0,
-   "hdp_1y": 1.6,
+   "hdp_1y": 2.0,
    "repo_1y": 3.8,
    "ukotvenost": "nad cílem",
-   "ukotvenost_odchylka": 0.7
+   "ukotvenost_odchylka": 0.5
   }
  }
 ]
