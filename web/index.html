@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NOSTRADAMUP — makroekonomická prognóza MUP</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root{--navy:#00205B;--blue:#003DA5;--bg:#F2F4F7;--card:#fff;--grid:#D8E0F0;--muted:#5A6478;--warn:#C0392B;--ok:#2E7D32}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--navy);
+ font-family:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.6}
+.wrap{max-width:1080px;margin:0 auto;padding:20px 16px 60px}
+header{border-bottom:3px solid var(--navy);padding-bottom:14px;margin-bottom:26px}
+h1{margin:0;font-size:clamp(22px,4vw,32px);letter-spacing:-.02em}
+.sub{color:var(--muted);font-size:13px;margin-top:4px}
+.hero{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:26px}
+.big{background:var(--card);border-radius:10px;padding:20px;border-left:5px solid var(--blue)}
+.big .lbl{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.big .val{font-size:clamp(30px,6vw,42px);font-weight:700;line-height:1.1;margin:6px 0 2px}
+.big .note{font-size:12px;color:var(--muted)}
+.badge{display:inline-block;padding:2px 9px;border-radius:11px;font-size:11px;font-weight:600;margin-top:6px}
+.badge.warn{background:#FBEAE8;color:var(--warn)}
+.badge.ok{background:#E8F3E9;color:var(--ok)}
+.card{background:var(--card);border-radius:10px;padding:20px;margin-bottom:18px}
+h2{font-size:17px;margin:0 0 4px;letter-spacing:-.01em}
+.hint{font-size:12.5px;color:var(--muted);margin:0 0 14px}
+.tabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}
+.tab{padding:6px 13px;border:1px solid var(--grid);background:var(--card);border-radius:16px;
+ cursor:pointer;font-size:13px;color:var(--muted);font-family:inherit}
+.tab.on{background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600}
+.chart{position:relative;height:330px}
+.chart.sm{height:260px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--grid)}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.commentary p{margin:0 0 12px}
+.scen{border:1px solid var(--grid);border-radius:8px;padding:11px 13px;margin-bottom:9px}
+.scen b{font-size:14px}
+.scen p{margin:3px 0 0;font-size:12.5px;color:var(--muted)}
+.params{display:flex;flex-wrap:wrap;gap:7px}
+.chip{background:var(--bg);border-radius:6px;padding:4px 10px;font-size:12px;
+ font-family:'IBM Plex Mono',ui-monospace,monospace}
+footer{color:var(--muted);font-size:12px;text-align:center;margin-top:34px;
+ border-top:1px solid var(--grid);padding-top:18px}
+.err{background:#FBEAE8;color:var(--warn);padding:16px;border-radius:8px}
+@media(max-width:600px){.chart{height:270px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>NOSTRADAMUP</h1>
+    <div class="sub" id="sub">Načítám…</div>
+  </header>
+  <div id="app"></div>
+  <footer>
+    <div>Metropolitní univerzita Praha · semi-strukturální novokeynesiánský model</div>
+    <div style="margin-top:5px" id="foot"></div>
+  </footer>
+</div>
+
+<script>
+const F = {
+  navy:'#00205B', blue:'#003DA5', band50:'rgba(0,61,165,.22)', band90:'rgba(0,61,165,.10)'
+};
+const el = (h) => { const d=document.createElement('div'); d.innerHTML=h.trim(); return d.firstChild; };
+const qLabel = (iso) => { const d=new Date(iso); return d.getFullYear()+'Q'+(Math.floor(d.getMonth()/3)+1); };
+const fmt = (v,dec=1) => v===null||v===undefined?'—':Number(v).toFixed(dec);
+
+fetch('data/latest.json?_=' + Date.now())
+  .then(r => { if(!r.ok) throw new Error('data/latest.json nenalezen'); return r.json(); })
+  .then(render)
+  .catch(e => {
+    document.getElementById('sub').textContent = '';
+    document.getElementById('app').innerHTML =
+      `<div class="err"><b>Chyba načtení dat.</b><br>${e.message}<br><br>
+       Spusť <code>python export_web.py</code> a ověř, že existuje <code>web/data/latest.json</code>.</div>`;
+  });
+
+function render(D){
+  const m = D.meta, h = D.headline || {};
+  document.getElementById('sub').innerHTML =
+    `Prognóza ${m.vintage} · aktualizováno ${m.generated} · data do ${m.data_through}`;
+  document.getElementById('foot').textContent =
+    `Vygenerováno ${m.generated_ts} · horizont ${m.horizon_quarters} čtvrtletí`;
+
+  const app = document.getElementById('app');
+
+  // ── Headline ──────────────────────────────────────────────────────────
+  const anch = h.ukotvenost || '';
+  const badge = anch === 'ukotvená'
+    ? `<span class="badge ok">očekávání ukotvená</span>`
+    : `<span class="badge warn">${anch} o ${fmt(Math.abs(h.ukotvenost_odchylka))} pp</span>`;
+  app.appendChild(el(`<div class="hero">
+    <div class="big"><div class="lbl">Inflace za 1 rok</div>
+      <div class="val">${fmt(h.inflace_1y)} %</div>
+      <div class="note">cíl ČNB ${fmt(h.cil)} %</div></div>
+    <div class="big"><div class="lbl">Inflace za 3 roky</div>
+      <div class="val">${fmt(h.inflace_3y)} %</div>${badge}</div>
+    <div class="big"><div class="lbl">HDP za 1 rok</div>
+      <div class="val">${fmt(h.hdp_1y)} %</div>
+      <div class="note">meziročně</div></div>
+    <div class="big"><div class="lbl">Repo sazba za 1 rok</div>
+      <div class="val">${fmt(h.repo_1y,2)} %</div>
+      <div class="note">2T repo ČNB</div></div>
+  </div>`));
+
+  // ── Prognózy: záložky se generují Z DAT (nic natvrdo) ─────────────────
+  const vars = D.variables || {};
+  const keys = Object.keys(vars).sort((a,b) =>
+    (vars[b].headline?1:0)-(vars[a].headline?1:0) ||
+    vars[a].group.localeCompare(vars[b].group));
+  if (keys.length) {
+    const card = el(`<div class="card"><h2>Prognóza</h2>
+      <p class="hint">Plná čára: skutečnost. Přerušovaná: medián prognózy. Pásma: 50% a 90% interval.</p>
+      <div class="tabs" id="tabs"></div><div class="chart"><canvas id="mainChart"></canvas></div></div>`);
+    app.appendChild(card);
+    let chart = null;
+    const draw = (k) => {
+      const v = vars[k];
+      const hist = v.history, fc = v.forecast;
+      const labels = hist.map(p=>qLabel(p.date)).concat(fc.map(p=>qLabel(p.date)));
+      const pad = hist.map(()=>null);
+      const link = hist.length ? hist[hist.length-1].value : null;
+      const ds = [
+        {label:'Skutečnost', data:hist.map(p=>p.value).concat(fc.map(()=>null)),
+         borderColor:F.navy, borderWidth:2.4, pointRadius:0, tension:.25},
+        {label:'Prognóza', data:pad.slice(0,-1).concat([link], fc.map(p=>p.median)),
+         borderColor:F.blue, borderWidth:2.4, borderDash:[6,3], pointRadius:0, tension:.25},
+        {label:'90 %', data:pad.slice(0,-1).concat([link], fc.map(p=>p.upper_90)),
+         borderColor:'transparent', backgroundColor:F.band90, fill:'+1', pointRadius:0},
+        {label:'_l90', data:pad.slice(0,-1).concat([link], fc.map(p=>p.lower_90)),
+         borderColor:'transparent', pointRadius:0},
+        {label:'50 %', data:pad.slice(0,-1).concat([link], fc.map(p=>p.upper_50)),
+         borderColor:'transparent', backgroundColor:F.band50, fill:'+1', pointRadius:0},
+        {label:'_l50', data:pad.slice(0,-1).concat([link], fc.map(p=>p.lower_50)),
+         borderColor:'transparent', pointRadius:0},
+      ];
+      if (chart) chart.destroy();
+      chart = new Chart(document.getElementById('mainChart'), {
+        type:'line', data:{labels, datasets:ds},
+        options:{responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+          plugins:{legend:{labels:{filter:i=>!i.text.startsWith('_'), boxWidth:12, font:{size:11}}},
+            tooltip:{filter:i=>!i.dataset.label.startsWith('_'),
+              callbacks:{label:c=>c.dataset.label+': '+fmt(c.parsed.y,2)+' '+v.unit}}},
+          scales:{y:{grid:{color:'#E8ECF5'},ticks:{font:{size:11}},title:{display:true,text:v.unit}},
+                  x:{grid:{display:false},ticks:{maxTicksLimit:10,font:{size:10}}}}}
+      });
+    };
+    const tabs = card.querySelector('#tabs');
+    keys.forEach((k,i) => {
+      const b = el(`<button class="tab${i===0?' on':''}">${vars[k].label}</button>`);
+      b.onclick = () => { tabs.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+                          b.classList.add('on'); draw(k); };
+      tabs.appendChild(b);
+    });
+    draw(keys[0]);
+  }
+
+  // ── Dekompozice ───────────────────────────────────────────────────────
+  if (D.decomposition) {
+    const ch = D.decomposition.channels, names = Object.keys(ch);
+    const hz = Object.keys(ch[names[0]]).sort((a,b)=>a-b);
+    app.appendChild(el(`<div class="card"><h2>Z čeho se skládá inflační prognóza</h2>
+      <p class="hint">Příspěvek kanálu = plný model minus model s vypnutým kanálem (identické šoky).
+      Zbytek do celku tvoří vlastní dynamika inflace.</p>
+      <div class="chart sm"><canvas id="decompChart"></canvas></div></div>`));
+    new Chart(document.getElementById('decompChart'), {
+      type:'bar',
+      data:{labels:names, datasets:hz.map((q,i)=>({
+        label:`za ${q} čtvrtletí`, data:names.map(n=>ch[n][q]),
+        backgroundColor:i===0?F.blue:'#7A9BD4'}))},
+      options:{indexAxis:'y', responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{labels:{boxWidth:12,font:{size:11}}},
+          tooltip:{callbacks:{label:c=>c.dataset.label+': '+(c.parsed.x>0?'+':'')+fmt(c.parsed.x,2)+' pp'}}},
+        scales:{x:{grid:{color:'#E8ECF5'},title:{display:true,text:'procentní body'},ticks:{font:{size:11}}},
+                y:{grid:{display:false},ticks:{font:{size:11}}}}}
+    });
+  }
+
+  // ── Scénáře ───────────────────────────────────────────────────────────
+  if (D.scenarios && D.scenarios.length) {
+    const S = D.scenarios;
+    const card = el(`<div class="card"><h2>Scénáře</h2>
+      <p class="hint">Liší se kredibilitou ČNB (ukotvení očekávání) a domácími nákladovými tlaky.
+      Sazby v každém scénáři reagují Taylorovým pravidlem.</p>
+      <div class="chart sm"><canvas id="scenChart"></canvas></div>
+      <div style="margin-top:14px" id="scenList"></div></div>`);
+    app.appendChild(card);
+    const labels = S[0].hicp.map(p=>qLabel(p.date));
+    new Chart(document.getElementById('scenChart'), {
+      type:'line',
+      data:{labels, datasets:S.map(s=>({label:s.name, data:s.hicp.map(p=>p.median),
+        borderColor:s.color, borderWidth:2.4, borderDash:[6,3], pointRadius:2.5, tension:.25}))},
+      options:{responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+        plugins:{legend:{labels:{boxWidth:12,font:{size:11}}},
+          tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.parsed.y,2)+' %'}}},
+        scales:{y:{grid:{color:'#E8ECF5'},title:{display:true,text:'inflace HICP (%)'},ticks:{font:{size:11}}},
+                x:{grid:{display:false},ticks:{font:{size:10}}}}}
+    });
+    const list = card.querySelector('#scenList');
+    S.forEach(s => list.appendChild(el(
+      `<div class="scen" style="border-left:4px solid ${s.color}">
+         <b>${s.name}</b> <span style="color:var(--muted);font-size:12px">
+         (λ=${s.anchoring}, tlak ${s.housing_pressure} pp)</span>
+         <p>${s.popis}</p></div>`)));
+  }
+
+  // ── Komentář ──────────────────────────────────────────────────────────
+  if (D.commentary) {
+    app.appendChild(el(`<div class="card commentary"><h2>Komentář</h2>` +
+      D.commentary.split(/\n\s*\n/).map(p=>`<p>${p.trim()}</p>`).join('') + `</div>`));
+  }
+
+  // ── ČNB tabulka (markdown -> HTML) ────────────────────────────────────
+  if (D.cnb_table) {
+    const rows = D.cnb_table.split('\n')
+      .filter(l => l.trim().startsWith('|') && !/^\|[-\s|]+\|$/.test(l.trim()))
+      .map(l => l.split('|').slice(1,-1).map(c=>c.trim()));
+    if (rows.length > 1) {
+      const body = rows.slice(1).map(r =>
+        `<tr><td>${r[0]}</td><td>${r[1]}</td><td class="num">${r[2]}</td></tr>`).join('');
+      const notes = D.cnb_table.split('\n').filter(l=>l.trim().startsWith('>'))
+        .map(l=>l.replace(/^>\s*/,'').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')).join('<br>');
+      app.appendChild(el(`<div class="card"><h2>Indikátory pro dotazník ČNB</h2>
+        <table><thead><tr><th>Indikátor</th><th>Horizont</th><th style="text-align:right">Hodnota</th></tr></thead>
+        <tbody>${body}</tbody></table>
+        <p class="hint" style="margin-top:12px">${notes}</p></div>`));
+    }
+  }
+
+  // ── Parametry běhu (transparentnost) ──────────────────────────────────
+  if (D.parameters) {
+    const chips = Object.entries(D.parameters)
+      .map(([k,v])=>`<span class="chip">${k} = ${v}</span>`).join('');
+    app.appendChild(el(`<div class="card"><h2>Nastavení modelu</h2>
+      <p class="hint">Hodnoty parametrů, se kterými byla tato prognóza spočítána.</p>
+      <div class="params">${chips}</div></div>`));
+  }
+}
+</script>
+</body>
+</html>

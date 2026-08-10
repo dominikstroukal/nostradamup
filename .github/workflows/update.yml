@@ -1,0 +1,121 @@
+name: Aktualizace prognózy
+
+# Běží automaticky každé pondělí v 6:00 UTC + ručně s vlastními parametry.
+# Ruční spuštění: záložka Actions -> Aktualizace prognózy -> Run workflow.
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      anchoring:
+        description: 'Ukotvenost očekávání λ (0-1)'
+        default: '0.75'
+      housing_pressure:
+        description: 'Tlak nemovitostí a služeb (pp)'
+        default: '0.5'
+      repo_neutral:
+        description: 'Neutrální repo sazba (%)'
+        default: '3.5'
+      bond5y:
+        description: '5Y výnos stát. dluhopisu (%)'
+        default: '4.1'
+      bond10y:
+        description: '10Y výnos stát. dluhopisu (%)'
+        default: '4.7'
+      swap_spread:
+        description: 'Swapový spread (pp)'
+        default: '0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  forecast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Instalace závislostí
+        run: pip install -r requirements.txt
+
+      # Vstupy jsou prázdné při cronu -> doplň defaulty
+      - name: Parametry
+        id: p
+        run: |
+          echo "anchoring=${{ github.event.inputs.anchoring || '0.75' }}" >> $GITHUB_OUTPUT
+          echo "housing=${{ github.event.inputs.housing_pressure || '0.5' }}" >> $GITHUB_OUTPUT
+          echo "repo=${{ github.event.inputs.repo_neutral || '3.5' }}" >> $GITHUB_OUTPUT
+          echo "b5=${{ github.event.inputs.bond5y || '4.1' }}" >> $GITHUB_OUTPUT
+          echo "b10=${{ github.event.inputs.bond10y || '4.7' }}" >> $GITHUB_OUTPUT
+          echo "swap=${{ github.event.inputs.swap_spread || '0.0' }}" >> $GITHUB_OUTPUT
+
+      - name: Stažení dat
+        run: python data_fetch.py
+
+      - name: Finanční data a prognózy
+        run: |
+          python financial_data.py \
+            --repo-neutral ${{ steps.p.outputs.repo }} \
+            --output-dir outputs/charts
+
+      - name: Export pro web
+        run: |
+          python export_web.py \
+            --anchoring ${{ steps.p.outputs.anchoring }} \
+            --housing-pressure ${{ steps.p.outputs.housing }} \
+            --repo-neutral ${{ steps.p.outputs.repo }} \
+            --bond5y ${{ steps.p.outputs.b5 }} \
+            --bond10y ${{ steps.p.outputs.b10 }} \
+            --swap-spread ${{ steps.p.outputs.swap }}
+
+      # Kontrola kvality: prázdný nebo nesmyslný výstup se nesmí publikovat
+      - name: Kontrola výstupu
+        run: |
+          python - <<'PY'
+          import json, sys
+          d = json.load(open("web/data/latest.json"))
+          h = d.get("headline", {})
+          v = h.get("inflace_1y")
+          assert v is not None, "chybí headline inflace"
+          assert -5 < v < 30, f"nesmyslná inflace: {v}"
+          assert d.get("variables"), "chybí proměnné"
+          print(f"OK: inflace 1Y = {v} %, {len(d['variables'])} proměnných")
+          PY
+
+      - name: Commit výsledků
+        run: |
+          git config user.name  "NOSTRADAMUP bot"
+          git config user.email "actions@github.com"
+          git add web/data outputs || true
+          if git diff --staged --quiet; then
+            echo "Beze změny."
+          else
+            git commit -m "Prognóza $(date +%Y-%m-%d)"
+            git push
+          fi
+
+  # Publikace webu na GitHub Pages
+  deploy:
+    needs: forecast
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.dep.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: dep
+        uses: actions/deploy-pages@v4

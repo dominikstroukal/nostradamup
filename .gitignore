@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+venv/
+.DS_Store
+data/raw/*.csv
+data/raw/*.json
+
+# Archiv staré verze (mimo git)
+_archiv/
+outputs/

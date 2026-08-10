@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Makro model – launcher</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f5; color: #1a1a1a; padding: 2rem; }
+.app { max-width: 680px; margin: 0 auto; }
+h1 { font-size: 18px; font-weight: 500; color: #00205B; margin-bottom: 1.5rem; }
+.section { margin-bottom: 1.5rem; }
+.section-title { font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: #888; margin-bottom: 10px; }
+.card { background: #fff; border: 0.5px solid #ddd; border-radius: 12px; padding: 1rem 1.25rem; }
+.param-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.param-row:last-child { margin-bottom: 0; }
+.param-label { font-size: 13px; color: #555; min-width: 200px; }
+.param-val { font-size: 13px; font-weight: 500; min-width: 52px; text-align: right; color: #1a1a1a; }
+input[type=range] { flex: 1; accent-color: #00205B; }
+.toggle-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 13px; color: #555; }
+.toggle-row input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; accent-color: #00205B; }
+.disabled-note { font-size: 12px; color: #aaa; }
+.cmd-box { background: #f0f2f5; border: 0.5px solid #ccc; border-radius: 8px; padding: 12px 14px; font-family: 'Menlo', 'Monaco', monospace; font-size: 12px; color: #1a1a1a; line-height: 1.7; word-break: break-all; white-space: pre-wrap; }
+.btn-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
+button { font-size: 13px; padding: 7px 14px; border-radius: 8px; border: 0.5px solid #ccc; background: transparent; cursor: pointer; color: #1a1a1a; transition: background 0.15s; }
+button:hover { background: #f0f0f0; }
+button:active { transform: scale(0.98); }
+.btn-primary { background: #00205B; color: #fff; border-color: #00205B; }
+.btn-primary:hover { background: #003DA5; border-color: #003DA5; }
+.copy-ok { color: #2e7d32; font-size: 12px; display: none; }
+.toggle-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #555; margin-bottom: 10px; }
+.toggle-check input[type=checkbox] { width: 16px; height: 16px; accent-color: #00205B; cursor: pointer; }
+.freeze-note { font-size: 12px; color: #e67e00; font-weight: 500; display: none; margin-top: 6px; }
+.frozen .param-row { opacity: 0.35; pointer-events: none; }
+hr { border: none; border-top: 0.5px solid #ddd; margin: 1.25rem 0; }
+.how-to { font-size: 13px; color: #555; line-height: 1.9; }
+.how-to code { font-family: 'Menlo', 'Monaco', monospace; font-size: 12px; color: #1a1a1a; background: #f0f2f5; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <h1>Makroekonomický model MUP – launcher</h1>
+
+  <div class="section">
+    <div class="section-title">Parametry PRIBOR 3M</div>
+    <div class="card">
+      <div class="param-row">
+        <span class="param-label">Rovnovážná sazba (%)</span>
+        <input type="range" id="pribor-eq" min="0.5" max="8" step="0.1" value="3.7" oninput="update()">
+        <span class="param-val" id="pribor-eq-val">3.0</span>
+      </div>
+      <div class="param-row">
+        <span class="param-label">Rychlost konvergence</span>
+        <input type="range" id="pribor-speed" min="0.05" max="0.6" step="0.05" value="0.30" oninput="update()">
+        <span class="param-val" id="pribor-speed-val">0.30</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Repo sazba ČNB</div>
+    <div class="card" id="repo-card">
+      <div class="toggle-check" style="margin-bottom: 12px;">
+        <input type="checkbox" id="repo-freeze" onchange="update()">
+        <span>Zmrazit repo sazbu na aktuální úrovni</span>
+      </div>
+      <div id="repo-neutral-row" class="param-row">
+        <span class="param-label">Neutrální repo sazba (%)</span>
+        <input type="range" id="repo-neutral" min="1.0" max="6.0" step="0.25" value="3.5" oninput="update()">
+        <span class="param-val" id="repo-neutral-val">3.50</span>
+      </div>
+      <div class="freeze-note" id="repo-freeze-note">
+        ⚠ Repo sazba zmrazena — Taylorovo pravidlo ignorováno, konstantní trajektorie
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Moderní makro – očekávání a Phillipsova křivka</div>
+    <div class="card">
+      <div class="param-row">
+        <span class="param-label">Ukotvenost očekávání (λ)</span>
+        <input type="range" id="anchoring" min="0" max="1" step="0.05" value="0.75" oninput="update()">
+        <span class="param-val" id="anchoring-val">0.75</span>
+      </div>
+      <div class="param-row">
+        <span class="param-label">Váha očekávání (γ_f)</span>
+        <input type="range" id="expect-weight" min="0" max="0.8" step="0.05" value="0.35" oninput="update()">
+        <span class="param-val" id="expect-weight-val">0.35</span>
+      </div>
+      <div class="param-row">
+        <span class="param-label">Konvexita Phillipsovy křivky</span>
+        <input type="range" id="phillips-convexity" min="0" max="3" step="0.1" value="0.8" oninput="update()">
+        <span class="param-val" id="phillips-convexity-val">0.8</span>
+      </div>
+      <div class="param-row">
+        <span class="param-label">Tlak nemovitostí + služeb (pp)</span>
+        <input type="range" id="housing-pressure" min="0" max="1.5" step="0.1" value="0.5" oninput="update()">
+        <span class="param-val" id="housing-pressure-val">0.5</span>
+      </div>
+      <div style="font-size:12px;color:#5A6478;line-height:1.6;margin-top:8px;">
+        λ = 1: plně kredibilní ČNB, inflace se rychle vrací k cíli 2 %.<br>
+        λ = 0: de-ukotvená očekávání, riziko inflačních spirál.<br>
+        Konvexita > 0: mzdový tlak prudce roste při napjatém trhu práce (Benigno-Eggertsson).<br>Tlak nemovitostí+služeb: lepkavé jádro drží inflaci nad cílem (Stock-Watson trend).
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Dlouhé sazby – IRS (dotazník ČNB)</div>
+    <div class="card">
+      <div class="param-row">
+        <span class="param-label">5Y výnos stát. dluhopisu (%)</span>
+        <input type="range" id="bond5y" min="1.0" max="8.0" step="0.05" value="4.1" oninput="update()">
+        <span class="param-val" id="bond5y-val">4.10</span>
+      </div>
+      <div class="param-row">
+        <span class="param-label">10Y výnos stát. dluhopisu (%)</span>
+        <input type="range" id="bond10y" min="1.0" max="8.0" step="0.05" value="4.7" oninput="update()">
+        <span class="param-val" id="bond10y-val">4.70</span>
+      </div>
+      <div class="param-row">
+        <span class="param-label">Swapový spread nad govvie (pp)</span>
+        <input type="range" id="swap-spread" min="-0.5" max="0.5" step="0.05" value="0.0" oninput="update()">
+        <span class="param-val" id="swap-spread-val">0.00</span>
+      </div>
+      <div style="font-size:12px;color:#5A6478;line-height:1.6;margin-top:8px;">
+        IRS = tržní výnos státního dluhopisu + swapový spread. Zadej aktuální
+        tržní výnosy (ruční override). 12M PRIBOR jde automaticky z fixingu ČNB.
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">EUR/CZK</div>
+    <div class="card">
+      <div class="toggle-row">
+        <input type="checkbox" id="eurczk-mr" onchange="update()" checked>
+        <span>Mean reversion (zadej cíl kurzu)</span>
+        <span class="disabled-note" id="eurczk-note">– jinak random walk</span>
+      </div>
+      <div class="param-row">
+        <span class="param-label">Cílová hodnota CZK</span>
+        <input type="range" id="eurczk-eq" min="22" max="30" step="0.1" value="24.3" oninput="update()">
+        <span class="param-val" id="eurczk-eq-val">25.0</span>
+      </div>
+      <div class="param-row">
+        <span class="param-label">Rychlost konvergence</span>
+        <input type="range" id="fx-speed" min="0.05" max="0.4" step="0.05" value="0.15" oninput="update()">
+        <span class="param-val" id="fx-speed-val">0.15</span>
+      </div>
+      <div class="param-row">
+        <span class="param-label">Pass-through do inflace</span>
+        <input type="range" id="erpt-coef" min="0" max="0.5" step="0.05" value="0.15" oninput="update()">
+        <span class="param-val" id="erpt-coef-val">0.15</span>
+      </div>
+      <div style="font-size:12px;color:#5A6478;line-height:1.6;margin-top:8px;">
+        Jak silně oslabení koruny zvyšuje inflaci přes dovozní ceny.
+        0 = uzavřená ekonomika, 0.15 = empirický odhad pro ČR, vyšší = silnější přenos.
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">EUR/USD</div>
+    <div class="card">
+      <div class="toggle-row">
+        <input type="checkbox" id="eurusd-mr" onchange="update()" checked>
+        <span>Mean reversion (zadej cíl kurzu)</span>
+        <span class="disabled-note" id="eurusd-note">– jinak random walk</span>
+      </div>
+      <div class="param-row">
+        <span class="param-label">Cílová hodnota USD</span>
+        <input type="range" id="eurusd-eq" min="0.85" max="1.40" step="0.01" value="1.18" oninput="update()">
+        <span class="param-val" id="eurusd-eq-val">1.08</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Výstupní složka</div>
+    <div class="card">
+      <div class="toggle-check" style="margin-bottom: 10px;">
+        <input type="checkbox" id="custom-dir" onchange="update()" checked>
+        <span>Vlastní výstupní složka</span>
+        <span class="disabled-note" id="custom-dir-note">– jinak outputs/charts vedle skriptu</span>
+      </div>
+      <div class="param-row" id="output-dir-row" style="opacity:0.35;pointer-events:none;">
+        <span class="param-label" style="min-width:unset;flex:1;">
+          <input type="text" id="output-dir-val"
+            placeholder="/Users/jmeno/Dropbox/projekt/outputs/charts"
+            value="/Users/dominikstroukal/Dropbox/3_Nostradamup/model/outputs/charts"
+            style="width:100%;font-family:monospace;font-size:12px;padding:5px 8px;
+                   border:0.5px solid #ccc;border-radius:6px;background:#f8f8f8;color:#1a1a1a;"
+            oninput="update()">
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Výstupy</div>
+    <div class="card">
+      <div class="toggle-check">
+        <input type="checkbox" id="run-sketch" onchange="update()" checked>
+        <span>Generovat sketch přehled (ručně kreslený styl)</span>
+      </div>
+      <div class="toggle-check" style="margin-top:10px;">
+        <input type="checkbox" id="run-backtest" onchange="update()">
+        <span>Spustit backtest (out-of-sample validace modelu)</span>
+      </div>
+      <div class="toggle-check" style="margin-top:10px;">
+        <input type="checkbox" id="run-scenarios" onchange="update()">
+        <span>Spustit scénářovou analýzu (základní / inflační / dezinflační)</span>
+      </div>
+      <div style="font-size:12px;color:#5A6478;line-height:1.6;margin-top:8px;">
+        Backtest porovná historické prognózy se skutečností (RMSE, Theilovo U vs. random walk).
+        Covid 2020 je z evaluace vyloučen. Výstup: report + grafy backtest_*.png.
+      </div>
+    </div>
+  </div>
+
+  <hr>
+
+  <div class="section">
+    <div class="section-title">Vygenerovaný příkaz</div>
+    <div class="cmd-box" id="cmd-output"></div>
+    <div class="btn-row">
+      <button class="btn-primary" onclick="copyCmd()">Zkopírovat příkaz</button>
+      <span class="copy-ok" id="copy-ok">Zkopírováno</span>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Jak spustit</div>
+    <div class="card how-to">
+      1. Otevři Terminál a přejdi do složky modelu<br>
+      <code>cd ~/Dropbox/3_Nostradamup/model</code><br><br>
+      2. Aktivuj virtuální prostředí<br>
+      <code>source venv/bin/activate</code><br><br>
+      3. Vlož a spusť zkopírovaný příkaz
+    </div>
+  </div>
+
+</div>
+
+<script>
+function fmtFloat(v, dec) { return parseFloat(v).toFixed(dec); }
+
+function update() {
+  const peq    = parseFloat(document.getElementById('pribor-eq').value);
+  const pspd   = parseFloat(document.getElementById('pribor-speed').value);
+  const repoN  = parseFloat(document.getElementById('repo-neutral').value);
+  const anchor = parseFloat(document.getElementById('anchoring').value);
+  const expW   = parseFloat(document.getElementById('expect-weight').value);
+  const pcx    = parseFloat(document.getElementById('phillips-convexity').value);
+  const hsp    = parseFloat(document.getElementById('housing-pressure').value);
+  const bond5  = parseFloat(document.getElementById('bond5y').value);
+  const bond10 = parseFloat(document.getElementById('bond10y').value);
+  const swapSp = parseFloat(document.getElementById('swap-spread').value);
+  const czMR   = document.getElementById('eurczk-mr').checked;
+  const czEq   = parseFloat(document.getElementById('eurczk-eq').value);
+  const usMR   = document.getElementById('eurusd-mr').checked;
+  const usEq   = parseFloat(document.getElementById('eurusd-eq').value);
+  const fxSpd  = parseFloat(document.getElementById('fx-speed').value);
+  const erpt   = parseFloat(document.getElementById('erpt-coef').value);
+  const sketch    = document.getElementById('run-sketch').checked;
+  const backtest  = document.getElementById('run-backtest').checked;
+  const scenarios = document.getElementById('run-scenarios').checked;
+  const repoFrz   = document.getElementById('repo-freeze').checked;
+  const customDir = document.getElementById('custom-dir').checked;
+  const outDir    = document.getElementById('output-dir-val').value.trim();
+
+  document.getElementById('pribor-eq-val').textContent    = fmtFloat(peq, 1);
+  document.getElementById('pribor-speed-val').textContent = fmtFloat(pspd, 2);
+  document.getElementById('repo-neutral-val').textContent = fmtFloat(repoN, 2);
+  document.getElementById('anchoring-val').textContent = fmtFloat(anchor, 2);
+  document.getElementById('expect-weight-val').textContent = fmtFloat(expW, 2);
+  document.getElementById('phillips-convexity-val').textContent = fmtFloat(pcx, 1);
+  document.getElementById('housing-pressure-val').textContent = fmtFloat(hsp, 1);
+  document.getElementById('bond5y-val').textContent = fmtFloat(bond5, 2);
+  document.getElementById('bond10y-val').textContent = fmtFloat(bond10, 2);
+  document.getElementById('swap-spread-val').textContent = fmtFloat(swapSp, 2);
+
+  // Repo freeze: disable slider, zobraz varování
+  document.getElementById('repo-neutral').disabled = repoFrz;
+
+  // Output dir toggle
+  const dirRow = document.getElementById('output-dir-row');
+  dirRow.style.opacity = customDir ? '1' : '0.35';
+  dirRow.style.pointerEvents = customDir ? '' : 'none';
+  document.getElementById('custom-dir-note').style.display = customDir ? 'none' : 'inline';
+  document.getElementById('repo-neutral-row').style.opacity = repoFrz ? '0.35' : '1';
+  document.getElementById('repo-neutral-row').style.pointerEvents = repoFrz ? 'none' : '';
+  document.getElementById('repo-freeze-note').style.display = repoFrz ? 'block' : 'none';
+  document.getElementById('eurczk-eq-val').textContent    = fmtFloat(czEq, 1);
+  document.getElementById('eurusd-eq-val').textContent    = fmtFloat(usEq, 2);
+  document.getElementById('fx-speed-val').textContent     = fmtFloat(fxSpd, 2);
+  document.getElementById('erpt-coef-val').textContent    = fmtFloat(erpt, 2);
+
+  ['eurczk-eq', 'fx-speed'].forEach(id => document.getElementById(id).disabled = !czMR);
+  document.getElementById('eurusd-eq').disabled = !usMR;
+  document.getElementById('eurczk-note').style.display = czMR ? 'none' : 'inline';
+  document.getElementById('eurusd-note').style.display = usMR ? 'none' : 'inline';
+
+  let parts = ['python data_fetch.py &&\\\npython financial_data.py'];
+  parts.push(`  --pribor-eq ${fmtFloat(peq, 1)}`);
+  parts.push(`  --pribor-speed ${fmtFloat(pspd, 2)}`);
+  if (!repoFrz) {
+    parts.push(`  --repo-neutral ${fmtFloat(repoN, 2)}`);
+  } else {
+    parts.push(`  --repo-freeze`);
+  }
+  if (czMR) {
+    parts.push(`  --eurczk-eq ${fmtFloat(czEq, 1)}`);
+    parts.push(`  --fx-speed ${fmtFloat(fxSpd, 2)}`);
+  }
+  if (usMR) {
+    parts.push(`  --eurusd-eq ${fmtFloat(usEq, 2)}`);
+    if (!czMR) parts.push(`  --fx-speed ${fmtFloat(fxSpd, 2)}`);
+  }
+  const dirFlag = customDir && outDir ? ` \\\n  --output-dir ${outDir}` : '';
+
+  // Přidej --output-dir do financial_data.py
+  if (customDir && outDir) parts.push(`  --output-dir ${outDir}`);
+
+  const expFlags = ` \\\n  --anchoring ${fmtFloat(anchor,2)} \\\n  --expect-weight ${fmtFloat(expW,2)} \\\n  --phillips-convexity ${fmtFloat(pcx,1)} \\\n  --erpt-coef ${fmtFloat(erpt,2)} \\\n  --housing-pressure ${fmtFloat(hsp,1)}`;
+  const irsFlags = ` \\\n  --bond5y ${fmtFloat(bond5,2)} \\\n  --bond10y ${fmtFloat(bond10,2)} \\\n  --swap-spread ${fmtFloat(swapSp,2)}`;
+  parts.push('&&\\\npython report_generator.py' + (repoFrz ? ' \\\n  --repo-freeze' : '') + expFlags + irsFlags + dirFlag);
+  if (sketch) parts.push('&&\\\npython sketch_report.py' + expFlags + dirFlag);
+  if (backtest) parts.push('&&\\\npython backtest.py' + dirFlag);
+  if (scenarios) parts.push('&&\\\npython scenarios.py' + dirFlag);
+
+  document.getElementById('cmd-output').textContent = parts.join(' \\\n');
+}
+
+function copyCmd() {
+  const txt = document.getElementById('cmd-output').textContent;
+  navigator.clipboard.writeText(txt).then(() => {
+    const ok = document.getElementById('copy-ok');
+    ok.style.display = 'inline';
+    setTimeout(() => ok.style.display = 'none', 2000);
+  });
+}
+
+update();
+</script>
+</body>
+</html>
