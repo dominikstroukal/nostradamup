@@ -3,7 +3,7 @@
 Čtvrtletní makroekonomický prognostický model pro ČR — Metropolitní univerzita Praha.
 Semi-strukturální novokeynesiánský model (IS křivka + Phillipsova křivka + Taylorovo pravidlo).
 
-**Web:** https://<uzivatel>.github.io/nostradamup/
+**Web:** https://dominikstroukal.github.io/nostradamup/
 
 ## Lokální spuštění
 
