@@ -1168,7 +1168,7 @@ def main():
 
     if cnb_md:
         print("\n" + "="*60)
-        print("  DOTAZNÍK ČNB (také zapsán na konci md reportu):")
+        print("  OČEKÁVÁNÍ HLAVNÍCH INFLAČNÍCH VELIČIN (také zapsáno na konci md reportu):")
         print("="*60)
         print(cnb_md)
         print("="*60)

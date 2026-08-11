@@ -8,3 +8,6 @@ data/raw/*.json
 # Archiv staré verze (mimo git)
 _archiv/
 outputs/
+
+# Interní kontext pro Claude Code (osobní poznámky, mimo veřejný repo)
+CLAUDE.md

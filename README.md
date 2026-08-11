@@ -1,9 +1,13 @@
 # NOSTRADAMUP
 
+**AI-powered predikční model české ekonomiky.**
+
 Čtvrtletní makroekonomický prognostický model pro ČR — Metropolitní univerzita Praha.
 Semi-strukturální novokeynesiánský model (IS křivka + Phillipsova křivka + Taylorovo pravidlo).
 
 **Web:** https://dominikstroukal.github.io/nostradamup/
+
+> Model, dokumentaci i tenhle repozitář sešíval [Claude](https://claude.com/claude-code) (Anthropic) za dohledu Dominika Stroukala.
 
 ## Lokální spuštění
 
@@ -41,7 +45,7 @@ a publikuje web na GitHub Pages.
 | `financial_data.py` | kurzy, sazby, nezaměstnanost + prognózy |
 | `report_generator.py` | jádro modelu (`ar_forecast`), report, dekompozice |
 | `scenarios.py` | scénářová analýza |
-| `cnb_survey.py` | tabulka indikátorů pro dotazník ČNB |
+| `cnb_survey.py` | tabulka očekávání hlavních inflačních veličin |
 | `backtest.py` | out-of-sample validace (Theil U) |
 | `sketch_report.py` | grafy v ručně kresleném stylu |
 | `export_web.py` | export do JSON pro web |

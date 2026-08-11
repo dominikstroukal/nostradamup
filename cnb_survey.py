@@ -172,7 +172,7 @@ def build_cnb_table(data: pd.DataFrame, forecast: pd.DataFrame,
     irs10_1y = _irs_market(bond10y, swap_spread, fin_intervals, 4)
 
     L = []
-    L.append("## Dotazník ČNB pro analytiky")
+    L.append("## Očekávání hlavních inflačních veličin")
     L.append("")
     L.append("| Indikátor | Horizont | Hodnota |")
     L.append("|-----------|----------|---------|")
