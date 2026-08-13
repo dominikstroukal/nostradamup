@@ -1101,16 +1101,83 @@ def main():
 
     print(f"\nGeneruji report pro {quarter_label}...")
 
+    # ---- Poctivé rozdělení historie/prognózy per veličina (jako web) ────────
+    # Historie jen skutečně pozorovaná; zastaralé veličiny (inflace/mzdy) se
+    # přepočítají od svého posledního pozorovaného Q, aby doplněné (flat-forward)
+    # hodnoty nešly do grafu jako "skutečnost". GDP aktuální Q = nowcast.
+    from data_fetch import load_last_obs
+    _LO = {k: pd.Timestamp(v) for k, v in load_last_obs().items()}
+    _LAST_COMPLETE = data.index[-1]
+    _present = forecast.index[0]
+    _hz_end = forecast.index[-1]
+
+    def _obs_end(v):
+        return min(_LO.get(v, _LAST_COMPLETE), _LAST_COMPLETE)
+
+    def _fwd(hist_src, iv):
+        out = {}
+        for q in pd.date_range(data.index[0], _hz_end, freq="QS"):
+            if q < _present and q in hist_src.index:
+                out[q] = float(hist_src.loc[q])
+            elif iv is not None and q in iv.index:
+                out[q] = float(iv["median"].loc[q])
+        return pd.Series(out).sort_index()
+
+    _Pg = _fwd(data["gdp_qoq"], intervals.get("gdp_qoq"))
+    _Pw = _fwd(data["wages_yoy"], intervals.get("wages_yoy")) if "wages_yoy" in intervals else None
+    _Ppr = _fwd(fin_df["pribor3m"], fin_intervals["pribor3m"]) if (fin_df is not None and fin_intervals and "pribor3m" in fin_intervals) else None
+    _Peu = _fwd(fin_df["eurczk"], fin_intervals["eurczk"]) if (fin_df is not None and fin_intervals and "eurczk" in fin_intervals) else None
+    _Pun = _fwd(fin_df["unempl"], fin_intervals["unempl"]) if (fin_df is not None and fin_intervals and "unempl" in fin_intervals) else None
+
+    def _sl(p, start):
+        return p.loc[start:].tolist() if p is not None else None
+
+    def _reforecast(var, oe):
+        start = oe + pd.offsets.QuarterBegin(1)
+        n = len(pd.date_range(start, _hz_end, freq="QS"))
+        if var in ("hicp_yoy", "cpi_yoy"):
+            return ar_forecast(data[var].loc[:oe], steps=n, is_inflation=True, extend=False,
+                               pribor_path=_sl(_Ppr, start), wages_path=_sl(_Pw, start),
+                               gdp_path=_sl(_Pg, start), eurczk_path=_sl(_Peu, start),
+                               anchoring=getattr(args, "anchoring", 0.75),
+                               erpt_coef=getattr(args, "erpt_coef", 0.15),
+                               housing_services_pressure=getattr(args, "housing_pressure", 0.5))
+        if var == "wages_yoy":
+            return ar_forecast(data[var].loc[:oe], steps=n, is_wages=True, extend=False,
+                               unempl_path=_sl(_Pun, start), gdp_path=_sl(_Pg, start),
+                               phillips_convexity=getattr(args, "phillips_convexity", 0.8),
+                               nairu=nairu_est)
+        return None
+
+    # GDP aktuální Q = nowcast (nepovinné, neshodí report)
+    try:
+        from nowcast import run_nowcast
+        _nc = run_nowcast()
+        if "gdp_qoq" in intervals:
+            intervals["gdp_qoq"].loc[intervals["gdp_qoq"].index[0], "median"] = _nc["estimate"]
+        print(f"  nowcast {_nc['current_quarter']} = {_nc['estimate']} % → GDP aktuální Q")
+    except Exception as _e:
+        print(f"  (nowcast v reportu přeskočen: {_e})")
+
     # ---- Grafy ----
     print("\n[1/3] Generuji fan charty...")
     chart_paths = {}
     for var in ["gdp_qoq", "gdp_yoy", "hicp_yoy", "cpi_yoy", "wages_yoy"]:
         if var not in forecast.columns:
             continue
+        oe = _obs_end(var)
+        iv_plot = intervals[var]
+        if oe < _LAST_COMPLETE:
+            try:
+                rf = _reforecast(var, oe)
+                if rf is not None:
+                    iv_plot = rf
+            except Exception as _e:
+                print(f"  (reforecast {var}: {_e})")
         path = os.path.join(charts_dir, f"mup_{var}_{quarter_label.replace('-','')}.png")
         plot_mup_fan_chart(
-            history=data[var],
-            intervals=intervals[var],
+            history=data[var].loc[:oe],
+            intervals=iv_plot,
             variable=var,
             quarter_label=quarter_label,
             save_path=path,
