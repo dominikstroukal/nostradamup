@@ -30,6 +30,29 @@ log = logging.getLogger(__name__)
 RAW_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "raw")
 os.makedirs(RAW_DIR, exist_ok=True)
 
+_LAST_OBS_PATH = os.path.join(RAW_DIR, "last_obs.json")
+
+
+def save_last_obs(mapping: dict) -> None:
+    """Uloží poslední skutečně pozorované čtvrtletí per proměnná (merge do JSON).
+    Klíč = název proměnné, hodnota = ISO datum začátku Q. Volá data_fetch
+    (makro) i financial_data (finanční) – každý zapíše své proměnné."""
+    cur = load_last_obs()
+    for k, v in mapping.items():
+        cur[k] = pd.Timestamp(v).strftime("%Y-%m-%d")
+    with open(_LAST_OBS_PATH, "w") as f:
+        json.dump(cur, f, indent=1, sort_keys=True)
+
+
+def load_last_obs() -> dict:
+    """Načte {proměnná: ISO datum} posledního pozorovaného Q, nebo {}."""
+    if os.path.exists(_LAST_OBS_PATH):
+        try:
+            return json.load(open(_LAST_OBS_PATH))
+        except Exception:
+            return {}
+    return {}
+
 # ─────────────────────────────────────────────
 # 1.  Česká republika  –  Eurostat (SDMX REST)
 #     Alternativa pro přímý přístup ke ČSÚ:
@@ -274,6 +297,10 @@ def build_cz_dataset() -> pd.DataFrame:
         "wages_yoy": wages_yoy,
     })
     df = df.resample("QS").mean()
+
+    # Poslední SKUTEČNĚ POZOROVANÉ čtvrtletí per proměnná (PŘED flat-forwardem).
+    # Web i report to potřebují, aby nezobrazovaly flat-forward jako "skutečnost".
+    save_last_obs({c: df[c].dropna().index[-1] for c in df.columns if df[c].notna().any()})
 
     # PAST #1 (CLAUDE.md): globální dropna() by ořízl dataset na NEJKRATŠÍ řadu.
     # Mzdy ze zálohy končí dřív než GDP/inflace z Eurostatu (které jsou o 2-3 Q

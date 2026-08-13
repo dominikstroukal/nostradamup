@@ -64,24 +64,28 @@ def build_payload(args) -> dict:
     macro = pd.DataFrame({c: _extend_to_present(macro[c]) for c in macro.columns}
                          ).sort_index().dropna()
 
+    # Poslední SKUTEČNĚ pozorované Q per proměnná (pro poctivé rozdělení
+    # historie vs prognóza – nezobrazovat flat-forward jako skutečnost).
+    from data_fetch import load_last_obs
+    LAST_OBS = {k: pd.Timestamp(v) for k, v in load_last_obs().items()}
+    LAST_COMPLETE = macro.index[-1]   # poslední kompletní Q (např. 2026Q2)
+
+    def obs_end(var):
+        """Poslední pozorované Q veličiny, zastropované na poslední kompletní Q."""
+        lo = LAST_OBS.get(var, LAST_COMPLETE)
+        return min(lo, LAST_COMPLETE)
+
     # ── Nowcast HDP: kotva aktuálního čtvrtletí ────────────────────────────
-    # Nowcast z měsíčních indikátorů nahradí flat-forward odhad běžného
-    # čtvrtletí, takže prognóza i inflační kanály startují z DAT, ne z kopie
-    # minulého Q. Sjednocuje nowcast s prognózou. Výpadek export neshodí.
+    # Nowcast (z měsíčních indikátorů) přepíše první prognózní bod HDP
+    # (aktuální Q), takže prognóza i inflační kanály startují z dat. Nowcast
+    # aktuální Q je přesnější než čistě AR odhad. Výpadek export neshodí.
     nowcast = None
     if not args.no_nowcast:
         try:
             from nowcast import run_nowcast
             nowcast = run_nowcast()
-            cq = pd.Period(nowcast["current_quarter"], "Q").to_timestamp()
-            if cq in macro.index:
-                macro.loc[cq, "gdp_qoq"] = nowcast["estimate"]
-                macro.loc[cq, "gdp_yoy"] = float(macro["gdp_qoq"].loc[:cq].tail(4).sum())
-                print(f"  nowcast {nowcast['current_quarter']} = {nowcast['estimate']} % QoQ "
-                      f"→ kotva startu prognózy")
-            else:
-                print(f"  nowcast {nowcast['current_quarter']} = {nowcast['estimate']} % "
-                      f"(mimo macro index, jen zobrazeno)")
+            print(f"  nowcast {nowcast['current_quarter']} = {nowcast['estimate']} % QoQ "
+                  f"→ přepíše první prognózní bod HDP")
         except Exception as e:
             print(f"  (nowcast přeskočen: {e})")
 
@@ -113,6 +117,12 @@ def build_payload(args) -> dict:
                                  is_sensitivity=args.is_sensitivity)
                 macro_iv[var] = iv
                 forecast[var] = iv["median"].values
+        # Nowcast kotva: přepiš první prognózní bod HDP (aktuální Q) nowcastem,
+        # aby z něj startovaly i inflační kanály (gdp_path).
+        if nowcast and "gdp_qoq" in forecast:
+            _q3 = forecast.index[0]
+            forecast.loc[_q3, "gdp_qoq"] = nowcast["estimate"]
+            macro_iv["gdp_qoq"].loc[macro_iv["gdp_qoq"].index[0], "median"] = nowcast["estimate"]
         gdp_path = list(forecast["gdp_qoq"]) if "gdp_qoq" in forecast else None
         if "wages_yoy" in macro.columns:
             iv = ar_forecast(macro["wages_yoy"], steps=steps, is_wages=True,
@@ -150,14 +160,76 @@ def build_payload(args) -> dict:
         "eurusd":    ("EUR/USD", "USD", "kurzy", False),
     }
 
+    # ── Poctivé rozdělení historie/prognózy per veličina ───────────────────
+    # Historie = jen skutečně pozorovaná data (obs_end). Vše po obs_end (včetně
+    # aktuálního Q) = prognóza s intervalem. Zastaralé veličiny (inflace, mzdy,
+    # EUR/CZK), u nichž je 2026 jen flat-forward, se PŘEPOČÍTAJÍ od jejich
+    # posledního pozorovaného Q, aby doplněné hodnoty nešly do historie.
+    present = forecast.index[0]
+    hz_end = forecast.index[-1]
+
+    def _fwd_path(hist_src, iv):
+        """Median cesta: pozorované pro Q před aktuálním, prognóza od aktuálního dál."""
+        idx = pd.date_range(macro.index[0], hz_end, freq="QS")
+        out = {}
+        for q in idx:
+            if q < present and q in hist_src.index:
+                out[q] = float(hist_src.loc[q])
+            elif q in iv.index:
+                out[q] = float(iv["median"].loc[q])
+        return pd.Series(out).sort_index()
+
+    P = {
+        "gdp":    _fwd_path(macro["gdp_qoq"], macro_iv["gdp_qoq"]),
+        "wages":  _fwd_path(macro["wages_yoy"], macro_iv["wages_yoy"]) if "wages_yoy" in macro_iv else None,
+        "pribor": _fwd_path(fin["pribor3m"], fin_iv["pribor3m"]) if "pribor3m" in fin_iv else None,
+        "repo":   _fwd_path(fin["repo_rate"], fin_iv["repo_rate"]) if "repo_rate" in fin_iv else None,
+        "eurczk": _fwd_path(fin["eurczk"], fin_iv["eurczk"]) if "eurczk" in fin_iv else None,
+        "unempl": _fwd_path(fin["unempl"], fin_iv["unempl"]) if "unempl" in fin_iv else None,
+    }
+
+    def _sl(path, start):
+        return path.loc[start:].tolist() if path is not None else None
+
+    from financial_data import _forecast_rw as _rw, _forecast_unemployment as _un
+
+    def _reforecast(var, oe):
+        """Přepočítá prognózu veličiny od oe+1 (poslední pozorované Q)."""
+        start = oe + pd.offsets.QuarterBegin(1)
+        n = len(pd.date_range(start, hz_end, freq="QS"))
+        if var in ("hicp_yoy", "cpi_yoy"):
+            return ar_forecast(macro[var].loc[:oe], steps=n, is_inflation=True, extend=False,
+                               pribor_path=_sl(P["pribor"], start), wages_path=_sl(P["wages"], start),
+                               gdp_path=_sl(P["gdp"], start), eurczk_path=_sl(P["eurczk"], start),
+                               anchoring=args.anchoring, expect_weight=args.expect_weight,
+                               erpt_coef=args.erpt_coef, housing_services_pressure=args.housing_pressure)
+        if var == "wages_yoy":
+            return ar_forecast(macro[var].loc[:oe], steps=n, is_wages=True, extend=False,
+                               unempl_path=_sl(P["unempl"], start), gdp_path=_sl(P["gdp"], start),
+                               phillips_convexity=args.phillips_convexity)
+        if var == "eurczk":
+            return _rw(fin[var].loc[:oe].dropna(), steps=n, extend=False)
+        if var == "unempl":
+            return _un(fin[var].loc[:oe].dropna(), steps=n, repo_path=_sl(P["repo"], start))
+        return None
+
     variables = {}
     for var, iv in {**macro_iv, **fin_iv}.items():
         label, unit, group, headline = META.get(var, (var, "", "ostatní", False))
         hist_src = macro[var] if var in macro.columns else (
             fin[var] if var in fin.columns else None)
+        oe = obs_end(var)
+        if hist_src is not None and oe < LAST_COMPLETE:
+            try:
+                rf = _reforecast(var, oe)
+                if rf is not None:
+                    iv = rf   # prognóza od oe+1 (pokrývá i doplněná 2026 Q s intervalem)
+            except Exception as e:
+                print(f"  (reforecast {var}: {e})")
+        hist = hist_src.loc[:oe] if hist_src is not None else None
         variables[var] = {
             "label": label, "unit": unit, "group": group, "headline": headline,
-            "history": _hist(hist_src) if hist_src is not None else [],
+            "history": _hist(hist) if hist is not None else [],
             "forecast": _ser(iv),
         }
 

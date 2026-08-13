@@ -72,16 +72,20 @@ def _current_quarter_start() -> pd.Timestamp:
 
 
 def _extend_to_present(series: pd.Series) -> pd.Series:
-    """Doplní sérii flat-forward do aktuálního čtvrtletí."""
+    """Zarovná sérii na POSLEDNÍ KOMPLETNÍ čtvrtletí (aktuální Q ještě neskončilo,
+    patří do prognózy). Kratší doplní flat-forward, delší (partiální aktuální Q)
+    ořízne. Prognóza pak startuje aktuálním Q a to dostane interval."""
     s = series.dropna()
     if len(s) == 0:
         return series
     last = s.index[-1]
-    current_q = _current_quarter_start()
-    if last >= current_q:
+    last_complete = _current_quarter_start() - pd.DateOffset(months=3)
+    if last == last_complete:
         return series
+    if last > last_complete:
+        return series[series.index <= last_complete]
     fill_idx = pd.date_range(start=last + pd.offsets.QuarterBegin(1),
-                             end=current_q, freq="QS")
+                             end=last_complete, freq="QS")
     fill = pd.Series(s.iloc[-1], index=fill_idx, name=series.name)
     return pd.concat([series, fill]).sort_index()
 

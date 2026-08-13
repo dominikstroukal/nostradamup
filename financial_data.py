@@ -535,30 +535,41 @@ def _current_quarter_start() -> pd.Timestamp:
 
 def _extend_to_present(series: pd.Series) -> pd.Series:
     """
-    Pokud série zaostává za aktuálním čtvrtletím, doplní ji flat-forward
-    (posledním známým pozorováním) až do Q současnosti.
-    Prognóza pak vždy startuje od dneška, ne z minulosti.
+    Zarovná sérii tak, aby končila POSLEDNÍM KOMPLETNÍM čtvrtletím.
+    Aktuální čtvrtletí ještě neskončilo (je srpen), takže patří do PROGNÓZY,
+    ne do historie. Kratší série se flat-forward doplní k poslednímu
+    kompletnímu Q; delší (s partiálním aktuálním Q z denních dat) se ořízne.
+    Prognóza tak u všech veličin startuje aktuálním čtvrtletím a to dostane
+    interval spolehlivosti, místo aby se tvářilo jako známá skutečnost.
     """
-    last = series.dropna().index[-1]
-    current_q = _current_quarter_start()
-    if last >= current_q:
-        return series  # série je aktuální, nic nedoplňovat
-    # Doplň chybějící čtvrtletí poslední hodnotou
+    s = series.dropna()
+    if len(s) == 0:
+        return series
+    last_complete = _current_quarter_start() - pd.DateOffset(months=3)
+    last = s.index[-1]
+    if last == last_complete:
+        return series
+    if last > last_complete:
+        return series[series.index <= last_complete]  # ořízni partiální aktuální Q+
     fill_idx = pd.date_range(start=last + pd.offsets.QuarterBegin(1),
-                             end=current_q, freq="QS")
-    fill = pd.Series(series.dropna().iloc[-1], index=fill_idx, name=series.name)
+                             end=last_complete, freq="QS")
+    fill = pd.Series(s.iloc[-1], index=fill_idx, name=series.name)
     return pd.concat([series, fill]).sort_index()
 
 
 # ── 4.  Modely prognózy ───────────────────────────────────────────────────────
 
-def _forecast_rw(series: pd.Series, steps: int = 8, n_sims: int = 2000) -> pd.DataFrame:
+def _forecast_rw(series: pd.Series, steps: int = 8, n_sims: int = 2000,
+                 extend: bool = True) -> pd.DataFrame:
     """
     Random walk s drift korekcí - standard pro devizové kurzy.
     Drift = průměrná čtvrtletní změna za posledních 5 let.
     Šířka pásma roste s sqrt(t) - typický FX fan chart.
+    extend=False: prognóza startuje od posledního bodu série (pro poctivé
+    per-veličina rámování, kde série končí dřív než poslední kompletní Q).
     """
-    series = _extend_to_present(series)
+    if extend:
+        series = _extend_to_present(series)
     vals = series.values.astype(float)
     # Drift z posledních 20 čtvrtletí (5 let)
     window = min(20, len(vals) - 1)
@@ -1210,6 +1221,12 @@ def build_financial_dataset(use_cache: bool = False,
         "repo_rate": repo,
         "unempl":    unempl,
     }
+
+    # Poslední SKUTEČNĚ POZOROVANÉ Q per proměnná (PŘED flat-forwardem) – pro
+    # web/report, aby nezobrazovaly doplněné hodnoty jako "skutečnost".
+    from data_fetch import save_last_obs
+    save_last_obs({k: v.dropna().index[-1] for k, v in series_dict.items()
+                   if v.notna().any()})
 
     # Doplň KAŽDOU sérii flat-forward do současnosti PŘED spojením. Jinak by
     # dropna() ořízl dataset na nejkratší sérii a nejnovější data (např. čerstvé
