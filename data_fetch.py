@@ -274,6 +274,20 @@ def build_cz_dataset() -> pd.DataFrame:
         "wages_yoy": wages_yoy,
     })
     df = df.resample("QS").mean()
+
+    # PAST #1 (CLAUDE.md): globální dropna() by ořízl dataset na NEJKRATŠÍ řadu.
+    # Mzdy ze zálohy končí dřív než GDP/inflace z Eurostatu (které jsou o 2-3 Q
+    # čerstvější), takže dropna by zahodil nejnovější reálná data. Řešení:
+    # kratší řady flat-forwardnout k datu nejdelší řady PŘED dropna.
+    latest = df.dropna(how="all").index.max()
+    for c in df.columns:
+        s = df[c].dropna()
+        if len(s) and s.index[-1] < latest:
+            fill_idx = pd.date_range(s.index[-1] + pd.offsets.QuarterBegin(1),
+                                     latest, freq="QS")
+            df.loc[fill_idx, c] = s.iloc[-1]
+            log.info("  %s: flat-forward %d Q do %s (kratší řada, aby neořízla dataset)",
+                     c, len(fill_idx), latest.date())
     df = df.dropna()
     df.to_csv(os.path.join(RAW_DIR, "cz_macro.csv"))
     log.info("CZ dataset uložen: %d čtvrtletí (%s – %s)", len(df), df.index[0].date(), df.index[-1].date())

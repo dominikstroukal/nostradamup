@@ -63,6 +63,28 @@ def build_payload(args) -> dict:
     macro = load_cz_dataset().resample("QS").mean().dropna()
     macro = pd.DataFrame({c: _extend_to_present(macro[c]) for c in macro.columns}
                          ).sort_index().dropna()
+
+    # ── Nowcast HDP: kotva aktuálního čtvrtletí ────────────────────────────
+    # Nowcast z měsíčních indikátorů nahradí flat-forward odhad běžného
+    # čtvrtletí, takže prognóza i inflační kanály startují z DAT, ne z kopie
+    # minulého Q. Sjednocuje nowcast s prognózou. Výpadek export neshodí.
+    nowcast = None
+    if not args.no_nowcast:
+        try:
+            from nowcast import run_nowcast
+            nowcast = run_nowcast()
+            cq = pd.Period(nowcast["current_quarter"], "Q").to_timestamp()
+            if cq in macro.index:
+                macro.loc[cq, "gdp_qoq"] = nowcast["estimate"]
+                macro.loc[cq, "gdp_yoy"] = float(macro["gdp_qoq"].loc[:cq].tail(4).sum())
+                print(f"  nowcast {nowcast['current_quarter']} = {nowcast['estimate']} % QoQ "
+                      f"→ kotva startu prognózy")
+            else:
+                print(f"  nowcast {nowcast['current_quarter']} = {nowcast['estimate']} % "
+                      f"(mimo macro index, jen zobrazeno)")
+        except Exception as e:
+            print(f"  (nowcast přeskočen: {e})")
+
     fin = build_financial_dataset(use_cache=True)
 
     ipath = os.path.join(BASE_DIR, "data", "raw", "fin_intervals.json")
@@ -190,17 +212,6 @@ def build_payload(args) -> dict:
             })
     except Exception as e:
         print(f"  (scénáře: {e})")
-
-    # ── Nowcast HDP (mixed-frequency faktorový model) ──────────────────────
-    # Volitelný blok: výpadek (nedostupná data, chyba fitu) nesmí shodit export.
-    nowcast = None
-    if not args.no_nowcast:
-        try:
-            from nowcast import run_nowcast
-            nowcast = run_nowcast()
-            print(f"  nowcast {nowcast['current_quarter']}: {nowcast['estimate']} % QoQ")
-        except Exception as e:
-            print(f"  (nowcast přeskočen: {e})")
 
     # ── Komentář + ČNB tabulka ─────────────────────────────────────────────
     now = datetime.date.today()
