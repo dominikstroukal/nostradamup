@@ -191,6 +191,17 @@ def build_payload(args) -> dict:
     except Exception as e:
         print(f"  (scénáře: {e})")
 
+    # ── Nowcast HDP (mixed-frequency faktorový model) ──────────────────────
+    # Volitelný blok: výpadek (nedostupná data, chyba fitu) nesmí shodit export.
+    nowcast = None
+    if not args.no_nowcast:
+        try:
+            from nowcast import run_nowcast
+            nowcast = run_nowcast()
+            print(f"  nowcast {nowcast['current_quarter']}: {nowcast['estimate']} % QoQ")
+        except Exception as e:
+            print(f"  (nowcast přeskočen: {e})")
+
     # ── Komentář + ČNB tabulka ─────────────────────────────────────────────
     now = datetime.date.today()
     ql = f"{now.year}-Q{(now.month - 1) // 3 + 1}"
@@ -220,8 +231,9 @@ def build_payload(args) -> dict:
         },
         # Parametry se exportují automaticky - přidáš CLI flag, objeví se na webu
         "parameters": {k: v for k, v in vars(args).items()
-                       if k not in ("out", "no_history")},
+                       if k not in ("out", "no_history", "no_nowcast")},
         "headline": headline,
+        "nowcast": nowcast,
         "variables": variables,
         "decomposition": decomp,
         "scenarios": scenarios,
@@ -245,6 +257,7 @@ def main():
     p.add_argument("--bond10y", type=float, default=4.7)
     p.add_argument("--swap-spread", type=float, default=0.0)
     p.add_argument("--no-history", action="store_true")
+    p.add_argument("--no-nowcast", action="store_true", help="přeskočit nowcast blok")
     args = p.parse_args()
 
     os.makedirs(args.out, exist_ok=True)

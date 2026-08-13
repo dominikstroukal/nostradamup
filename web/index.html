@@ -110,6 +110,63 @@ function render(D){
       <div class="note">2T repo ČNB</div></div>
   </div>`));
 
+  // ── Nowcast HDP (běžící odhad probíhajícího čtvrtletí) ────────────────
+  if (D.nowcast) {
+    const N = D.nowcast, lr = N.last_release || {};
+    const card = el(`<div class="card"><h2>Nowcast HDP — běžící odhad</h2>
+      <p class="hint">Odhad růstu HDP za právě probíhající čtvrtletí z měsíčních indikátorů
+      (mixed-frequency faktorový model). Doplňuje prognózu: kde ekonomika je teď, než ČSÚ zveřejní HDP.</p>
+      <div class="hero" style="margin-bottom:18px">
+        <div class="big"><div class="lbl">Nowcast ${N.current_quarter}</div>
+          <div class="val">${fmt(N.estimate,2)} %</div><div class="note">mezikvartálně (QoQ)</div></div>
+        <div class="big"><div class="lbl">Výhled ${N.next_quarter||''}</div>
+          <div class="val">${fmt(N.next_estimate,2)} %</div><div class="note">QoQ</div></div>
+        <div class="big"><div class="lbl">Posl. publikované HDP</div>
+          <div class="val">${fmt(N.last_actual,2)} %</div><div class="note">${N.last_actual_q} (ČSÚ)</div></div>
+      </div>
+      <div class="chart sm"><canvas id="ncChart"></canvas></div>
+      <p class="hint" style="margin-top:18px"><b>Co pohnulo odhadem ${lr.quarter}:</b>
+        ${fmt(lr.prev,2)} % → ${fmt(lr.post,2)} %
+        (Δ ${lr.delta>=0?'+':''}${fmt(lr.delta,2)} pp) při posledním batchi dat.
+        Příspěvek = překvapení × váha (Kalmanův zisk).</p>
+      <div class="chart sm"><canvas id="ncNews"></canvas></div></div>`);
+    app.appendChild(card);
+
+    const H = N.history;
+    const fut = [N.current_quarter, N.next_quarter].filter(Boolean);
+    const labels = H.map(p=>p.q).concat(fut);
+    const link = H.length ? H[H.length-1].model : null;
+    new Chart(card.querySelector('#ncChart'), {
+      type:'line',
+      data:{labels, datasets:[
+        {label:'Skutečnost (ČSÚ)', data:H.map(p=>p.actual).concat(fut.map(()=>null)),
+         borderColor:F.navy, borderWidth:2.4, pointRadius:0, tension:.25},
+        {label:'Model / nowcast', data:H.map(p=>p.model).concat([N.estimate, N.next_estimate].slice(0,fut.length)),
+         borderColor:F.blue, borderWidth:2.4, borderDash:[6,3],
+         pointRadius:H.map(()=>0).concat(fut.map(()=>4)),
+         pointBackgroundColor:F.blue, tension:.25},
+      ]},
+      options:{responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+        plugins:{legend:{labels:{boxWidth:12,font:{size:11}}},
+          tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.parsed.y,2)+' %'}}},
+        scales:{y:{grid:{color:'#E8ECF5'},title:{display:true,text:'HDP QoQ (%)'},ticks:{font:{size:11}}},
+                x:{grid:{display:false},ticks:{font:{size:10}}}}}
+    });
+
+    const C = lr.contributions || [];
+    new Chart(card.querySelector('#ncNews'), {
+      type:'bar',
+      data:{labels:C.map(c=>c.label), datasets:[{
+        label:'Příspěvek k pohybu odhadu (pp)', data:C.map(c=>c.impact),
+        backgroundColor:C.map(c=>c.impact>=0?F.blue:F.navy)}]},
+      options:{indexAxis:'y', responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{display:false},
+          tooltip:{callbacks:{label:c=>(c.parsed.x>=0?'+':'')+fmt(c.parsed.x,3)+' pp'}}},
+        scales:{x:{grid:{color:'#E8ECF5'},title:{display:true,text:'procentní body'},ticks:{font:{size:11}}},
+                y:{grid:{display:false},ticks:{font:{size:11}}}}}
+    });
+  }
+
   // ── Prognózy: záložky se generují Z DAT (nic natvrdo) ─────────────────
   const vars = D.variables || {};
   const keys = Object.keys(vars).sort((a,b) =>
