@@ -1,18 +1,23 @@
 """
 nowcast.py
 ==========
-Nowcast HDP ČR pomocí mixed-frequency dynamického faktorového modelu (DFM).
+Nowcast HDP ČR pomocí BRIDGE REGRESE.
 
-Myšlenka (Bok et al. 2018, NY Fed Nowcast; Mariano-Murasawa 2003):
-  Existuje malý počet latentních faktorů (zde 1 "stav ekonomiky"), na které
-  nakládají všechny pozorované indikátory. Měsíční indikátory vychází dřív
-  (konfidence ~42 dní) než tvrdá data (~72 dní) a HDP až ~s velkým zpožděním.
-  Kalmanův filtr dopočítá faktor i z "roztřepeného okraje" (ragged edge –
-  část nejnovějších dat ještě nevyšla) a z něj implikuje HDP za probíhající
-  čtvrtletí = NOWCAST.
+Myšlenka:
+  Měsíční indikátory (průmysl, maloobchod, konfidence…) se agregují na čtvrtletí
+  a HDP QoQ se na ně regreduje. Bridge využívá SOUČASNOU vazbu indikátor–HDP
+  (průmyslová produkce koreluje s HDP QoQ +0,88), takže odhad míří tam, kam
+  ekonomika teď, a trefuje směr. Ragged edge (část dat za probíhající Q ještě
+  nevyšla) se řeší průměrem dostupných měsíců; chybějící indikátor = neutrální
+  (průměr).
 
-Fáze 1: datová vrstva + fit DFMQ + bodový nowcast + sanity check vůči historii.
-(Bez webu a news-dekompozice – ty přijdou ve Fázi 2 a 3.)
+Proč ne dynamický faktorový model (DFM): testovaný DynamicFactorMQ vyráběl
+odhad posunutý o kvartál (corr s HDP[t-1] = 0,95) a směr změny pletl v ~⅔
+případů (směrová shoda 28-33 %). Bridge na týchž datech trefuje směr
+(corr(Δ) +0,51, směrová shoda 59 %) a není posunutý. Viz git historie.
+
+Dekompozice "co pohnulo odhadem" je u bridge přímočará: příspěvek indikátoru
+= β_i × změna (standardizovaného) indikátoru.
 
 Spuštění:
     python nowcast.py
@@ -23,7 +28,6 @@ import logging
 import requests
 import numpy as np
 import pandas as pd
-import statsmodels.api as sm
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s  %(levelname)s  %(message)s",
@@ -36,7 +40,7 @@ os.makedirs(RAW_DIR, exist_ok=True)
 BASE = "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/"
 
 # ── Konfigurace indikátorů ────────────────────────────────────────────────
-# transform: jak sérii převést na stacionární pro DFM.
+# transform: převod na stacionární / srovnatelnou veličinu.
 #   "logdiff" = 100*Δlog (měsíční % růst indexu)  – pro tvrdé indexy
 #   "diff"    = první diference (pp změna)          – pro nezaměstnanost
 #   "level"   = ponech úroveň (konfidence jsou stacionární kolem průměru)
@@ -51,12 +55,19 @@ MONTHLY = [
     ("conf_retail", "ei_bssi_m_r2", {"indic":"BS-RCI-BAL","s_adj":"SA"}, "level"),
 ]
 GDP = ("namq_10_gdp", {"unit":"CLV_PCH_PRE","s_adj":"SCA","na_item":"B1GQ"})  # HDP QoQ %
+INDICATORS = [m[0] for m in MONTHLY]
 
-# COVID: dubnový propad 2020 a odraz jsou extrémní odlehlé hodnoty, které by
-# zkreslily odhad faktoru. U tvrdých dat je pro fit maskujeme (Kalman je bere
-# jako chybějící). Poctivé outlier-handling, ne zametání – nowcast má popisovat
-# normální dynamiku, ne krátký šok lockdownů.
+# COVID: propad a odraz 2020 jsou extrémní odlehlé hodnoty; maskujeme je u
+# tvrdých dat i HDP a vynecháme z fitu regrese, aby nezkreslily koeficienty.
 COVID_MASK = (pd.Timestamp("2020-03-01"), pd.Timestamp("2020-06-01"))
+COVID_YEARS = (2020, 2021)
+
+# Hezké názvy indikátorů pro web/výstup
+LABELS = {
+    "ip": "Průmyslová produkce", "retail": "Maloobchod", "construction": "Stavebnictví",
+    "unempl": "Nezaměstnanost", "esi": "ESI sentiment", "conf_ind": "Konfidence: průmysl",
+    "conf_cons": "Konfidence: spotřebitel", "conf_retail": "Konfidence: maloobchod",
+}
 
 
 def _parse_period(p):
@@ -107,7 +118,7 @@ def _transform(s, how):
 
 
 def build_nowcast_data(mask_covid=True):
-    """Vrátí (monthly_df stacionární, gdp_q) připravené pro DFMQ."""
+    """Vrátí (monthly_df, gdp_q): měsíční indikátory (transformované) + HDP QoQ."""
     log.info("Stahuji měsíční indikátory + HDP ...")
     cols = {}
     for name, ds, dims, how in MONTHLY:
@@ -128,147 +139,131 @@ def build_nowcast_data(mask_covid=True):
     return monthly, gdp
 
 
-def fit_nowcast(monthly, gdp, factors=1, factor_order=2):
-    """Nafituje mixed-frequency DFM (statsmodels DynamicFactorMQ)."""
-    log.info("Fituji DynamicFactorMQ (faktory=%d, řád=%d) ...", factors, factor_order)
-    mod = sm.tsa.DynamicFactorMQ(
-        monthly,
-        endog_quarterly=gdp.to_frame(),
-        factors=factors,
-        factor_orders=factor_order,
-        idiosyncratic_ar1=True,
-    )
-    res = mod.fit(disp=False)
-    return res
+# ── Bridge regrese ─────────────────────────────────────────────────────────
+
+def to_quarterly(monthly, min_months=1):
+    """Agreguje měsíční indikátory na čtvrtletí (průměr dostupných měsíců).
+    min_months=3 → jen kompletní čtvrtletí (pro fit); 1 → i ragged aktuální Q."""
+    qidx = monthly.index.asfreq("Q")
+    out = {}
+    for c in monthly.columns:
+        g = monthly[c].groupby(qidx)
+        out[c] = g.mean().where(g.count() >= min_months)
+    return pd.DataFrame(out)
 
 
-# Hezké názvy indikátorů pro web/výstup
-LABELS = {
-    "ip": "Průmyslová produkce", "retail": "Maloobchod", "construction": "Stavebnictví",
-    "unempl": "Nezaměstnanost", "esi": "ESI sentiment", "conf_ind": "Konfidence: průmysl",
-    "conf_cons": "Konfidence: spotřebitel", "conf_retail": "Konfidence: maloobchod",
-}
+def fit_bridge(monthly, gdp, alpha=1.0):
+    """Ridge regrese HDP QoQ na čtvrtletně agregované indikátory (standardizované,
+    COVID roky vynechány). Vrací koeficienty + standardizaci."""
+    Qc = to_quarterly(monthly, min_months=3)
+    df = Qc[INDICATORS].join(gdp.rename("gdp")).dropna()
+    df = df[~df.index.year.isin(COVID_YEARS)]
+    X = df[INDICATORS]
+    y = df["gdp"].values
+    mu = X.mean()
+    sd = X.std().replace(0, 1.0)
+    Xs = ((X - mu) / sd).values
+    Xd = np.column_stack([np.ones(len(Xs)), Xs])
+    R = np.eye(Xd.shape[1]) * alpha
+    R[0, 0] = 0.0  # nepenalizuj intercept
+    beta = np.linalg.solve(Xd.T @ Xd + R, Xd.T @ y)
+    return {"beta": beta, "mu": mu, "sd": sd, "cols": list(INDICATORS), "n": len(df)}
 
 
-def _to_quarterly(s):
-    """Měsíčně mapovaná predikce HDP -> čtvrtletní (hodnota v posledním měsíci Q)."""
-    s = s[[p.month % 3 == 0 for p in s.index]]
-    s.index = pd.PeriodIndex([f"{p.year}Q{(p.month - 1) // 3 + 1}" for p in s.index], freq="Q")
-    return s
+def bridge_predict(fit, q_row):
+    """Nowcast pro jedno čtvrtletí. Chybějící indikátor (ragged edge) = průměr."""
+    z = ((q_row[fit["cols"]] - fit["mu"]) / fit["sd"]).astype(float).fillna(0.0).values
+    return float(fit["beta"][0] + fit["beta"][1:] @ z)
 
 
-def nowcast_series(res):
-    """Čtvrtletní odhad HDP (in-sample fit + forecast do konce příštího Q)."""
-    ins = res.predict()["gdp_qoq"]
-    fut = res.forecast(steps=6)["gdp_qoq"]
-    return _to_quarterly(pd.concat([ins, fut]))
+def fitted_quarterly(fit, monthly):
+    """In-sample odhad HDP za každé KOMPLETNÍ čtvrtletí (model vs skutečnost)."""
+    Qc = to_quarterly(monthly, min_months=3)
+    idx = [q for q in Qc.index if Qc.loc[q, INDICATORS].notna().all()]
+    return pd.Series({q: bridge_predict(fit, Qc.loc[q]) for q in idx})
 
 
-def news_decomposition(res, monthly, gdp):
-    """
-    Rozpad 'co pohnulo nowcastem' (Bańbura-Modugno news framework).
+def news_decomposition(fit, monthly, cur_q):
+    """Rozpad 'co pohnulo odhadem' probíhajícího Q: příspěvek indikátoru
+    = β_i × (standardizovaná změna indikátoru mezi vintage před/po posledním
+    měsíci dat). Přímočařejší než u faktorového modelu."""
+    Qu = to_quarterly(monthly).loc[cur_q]
+    m_prev = monthly.copy()
+    m_prev.loc[monthly.dropna(how="all").index[-1]] = np.nan
+    Qp_all = to_quarterly(m_prev)
+    Qp = Qp_all.loc[cur_q] if cur_q in Qp_all.index else Qu * np.nan
 
-    Porovná dvě datové vintage se STEJNÝMI parametry modelu (jen jiná data):
-      previous = bez posledního měsíce dat, updated = se vším.
-    Rozdíl v nowcastu HDP se rozloží na příspěvky jednotlivých nově příchozích
-    pozorování: impact = news (překvapení = observed - očekávané) × weight
-    (Kalmanův zisk přepočtený na HDP). To je poctivý analog druhého grafu
-    z gdpdynamics ('Changes in Contributions').
-    """
-    target_q = (gdp.dropna().index[-1] + 1)                 # první nepublikované Q
-    impact_month = str(target_q.asfreq("M", how="end"))     # jeho poslední měsíc
+    def _z(row):
+        return ((row[fit["cols"]] - fit["mu"]) / fit["sd"]).astype(float).fillna(0.0)
 
-    monthly_prev = monthly.copy()
-    monthly_prev.iloc[-1] = np.nan                          # stav před posledním releasem
-    res_prev = res.apply(monthly_prev, endog_quarterly=gdp.to_frame(), retain_standardization=True)
-    res_upd  = res.apply(monthly,      endog_quarterly=gdp.to_frame(), retain_standardization=True)
-
-    news = res_upd.news(res_prev, impact_date=impact_month,
-                        impacted_variable="gdp_qoq", comparison_type="previous")
-
-    det = news.details_by_impact.reset_index()
-    contrib = det.groupby("updated variable")["impact"].sum().sort_values(key=abs, ascending=False)
-    prev_f = float(news.prev_impacted_forecasts["gdp_qoq"].iloc[0])
-    post_f = float(news.post_impacted_forecasts["gdp_qoq"].iloc[0])
-    return target_q, contrib, prev_f, post_f
+    zu, zp = _z(Qu), _z(Qp)
+    contrib = {c: float(fit["beta"][1 + i] * (zu[c] - zp[c])) for i, c in enumerate(fit["cols"])}
+    return cur_q, bridge_predict(fit, Qp), bridge_predict(fit, Qu), contrib
 
 
 def run_nowcast(hist_q=12):
-    """
-    Spočítá nowcast a vrátí JSON-safe dict pro web (export_web.py).
-    Obsahuje: odhad probíhajícího + příštího Q, historii model vs skutečnost,
-    a news-rozpad posledního releasu.
-    """
+    """Spočítá nowcast a vrátí JSON-safe dict pro web (export_web.py)."""
     monthly, gdp = build_nowcast_data()
-    res = fit_nowcast(monthly, gdp)
-    gdp_hat = nowcast_series(res)
+    fit = fit_bridge(monthly, gdp)
     actual = gdp.dropna()
+    fitted = fitted_quarterly(fit, monthly)
 
-    comp = pd.DataFrame({"actual": actual, "model": gdp_hat}).dropna().tail(hist_q)
-    nowcasts = gdp_hat[gdp_hat.index > actual.index[-1]].head(2)
-    target_q, contrib, prev_f, post_f = news_decomposition(res, monthly, gdp)
+    cur_q = actual.index[-1] + 1
+    Qall = to_quarterly(monthly)
+    estimate = bridge_predict(fit, Qall.loc[cur_q]) if cur_q in Qall.index else float("nan")
 
-    data_through = monthly.dropna(how="all").index[-1]
+    comp = pd.DataFrame({"actual": actual, "model": fitted}).dropna().tail(hist_q)
+    tq, prev_f, post_f, contrib = news_decomposition(fit, monthly, cur_q)
+    contrib_sorted = sorted(contrib.items(), key=lambda kv: -abs(kv[1]))
+
     return {
-        "current_quarter": str(nowcasts.index[0]),
-        "estimate": round(float(nowcasts.iloc[0]), 2),
-        "next_quarter": str(nowcasts.index[1]) if len(nowcasts) > 1 else None,
-        "next_estimate": round(float(nowcasts.iloc[1]), 2) if len(nowcasts) > 1 else None,
+        "current_quarter": str(cur_q),
+        "estimate": round(estimate, 2),
         "unit": "% QoQ",
-        "data_through": str(data_through),
+        "data_through": str(monthly.dropna(how="all").index[-1]),
         "last_actual_q": str(actual.index[-1]),
         "last_actual": round(float(actual.iloc[-1]), 2),
         "history": [{"q": str(q), "actual": round(float(r.actual), 2),
                      "model": round(float(r.model), 2)} for q, r in comp.iterrows()],
         "last_release": {
-            "quarter": str(target_q),
-            "prev": round(prev_f, 3), "post": round(post_f, 3),
+            "quarter": str(tq), "prev": round(prev_f, 3), "post": round(post_f, 3),
             "delta": round(post_f - prev_f, 3),
             "contributions": [{"indicator": k, "label": LABELS.get(k, k),
-                               "impact": round(float(v), 4)} for k, v in contrib.items()],
+                               "impact": round(v, 4)} for k, v in contrib_sorted],
         },
     }
 
 
 def main():
     monthly, gdp = build_nowcast_data()
-    log.info("Měsíční matice: %s, HDP: %d čtvrtletí (do %s)",
-             monthly.shape, gdp.dropna().shape[0], gdp.dropna().index[-1])
-    res = fit_nowcast(monthly, gdp)
-
-    # HDP je v DFMQ interně mapované na POSLEDNÍ měsíc čtvrtletí. Nowcast
-    # probíhajícího čtvrtletí = predikce v jeho posledním měsíci (Kalman
-    # kondicionuje na všech dostupných měsíčních datech, zbytek čtvrtletí dopočte).
-    gdp_hat = nowcast_series(res)
-
-    print("\n" + "=" * 62)
-    print("  NOWCAST HDP ČR — sanity check (model vs. skutečnost)")
-    print("=" * 62)
+    fit = fit_bridge(monthly, gdp)
     actual = gdp.dropna()
-    comp = pd.DataFrame({"skutečnost": actual, "model": gdp_hat}).dropna().tail(8)
-    print(comp.to_string(float_format=lambda x: f"{x:+.2f}"))
-    rmse = np.sqrt(((comp["skutečnost"] - comp["model"]) ** 2).mean())
-    print(f"In-sample RMSE (posl. 8Q): {rmse:.2f} pp")
+    fitted = fitted_quarterly(fit, monthly)
+    comp = pd.DataFrame({"actual": actual, "model": fitted}).dropna()
 
-    # Aktuální nowcast = první čtvrtletí ZA posledním publikovaným HDP
-    last_actual_q = actual.index[-1]
-    nowcasts = gdp_hat[gdp_hat.index > last_actual_q]
-    print(f"\nPoslední publikované HDP: {last_actual_q} = {actual.iloc[-1]:+.2f} %")
-    print("Nowcast dosud nepublikovaných čtvrtletí:")
-    for q, v in nowcasts.head(2).items():
-        print(f"   {q}:  {v:+.2f} % QoQ")
-
-    # ── News dekompozice posledního releasu ──────────────────────────────
-    target_q, contrib, prev_f, post_f = news_decomposition(res, monthly, gdp)
     print("\n" + "=" * 62)
-    print(f"  CO POHNULO NOWCASTEM {target_q} (poslední batch dat)")
+    print("  NOWCAST HDP ČR — bridge regrese (model vs. skutečnost)")
     print("=" * 62)
-    print(f"  před releasem: {prev_f:+.3f} %   →   po releasu: {post_f:+.3f} %"
-          f"   (Δ {post_f - prev_f:+.3f} pp)")
-    print("  Příspěvky podle indikátoru (pp):")
-    for name, val in contrib.items():
-        bar = "▇" * int(round(abs(val) / max(contrib.abs().max(), 1e-9) * 20))
-        print(f"    {name:12s} {val:+.4f}  {bar}")
+    print(comp.tail(8).to_string(float_format=lambda x: f"{x:+.2f}"))
+
+    c = comp.loc["2015":]
+    da, dm = c["actual"].diff(), c["model"].diff()
+    hit = (np.sign(da) == np.sign(dm)).mean()
+    print(f"\nSměrová diagnostika (2015+, n={len(c)}):")
+    print(f"  corr(model, skutečnost[t])   = {c['model'].corr(c['actual']):+.2f}")
+    print(f"  corr(Δmodel, Δskutečnost)     = {da.corr(dm):+.2f}   (kladná = trefuje směr)")
+    print(f"  směrová shoda                = {100*hit:.0f} %")
+
+    cur_q = actual.index[-1] + 1
+    Qall = to_quarterly(monthly)
+    if cur_q in Qall.index:
+        est = bridge_predict(fit, Qall.loc[cur_q])
+        print(f"\nNowcast {cur_q}: {est:+.2f} % QoQ  (posl. publikované {actual.index[-1]} = {actual.iloc[-1]:+.2f})")
+        tq, prev_f, post_f, contrib = news_decomposition(fit, monthly, cur_q)
+        print(f"Co pohnulo odhadem {tq}: {prev_f:+.3f} → {post_f:+.3f} (Δ {post_f-prev_f:+.3f} pp)")
+        for k, v in sorted(contrib.items(), key=lambda kv: -abs(kv[1])):
+            if abs(v) > 1e-4:
+                print(f"    {LABELS.get(k,k):24s} {v:+.4f}")
 
 
 if __name__ == "__main__":
