@@ -105,6 +105,9 @@ function render(D){
     <div class="big"><div class="lbl">HDP za 1 rok</div>
       <div class="val">${fmt(h.hdp_1y)} %</div>
       <div class="note">meziročně</div></div>
+    ${D.nowcast ? `<div class="big"><div class="lbl">HDP nyní · nowcast</div>
+      <div class="val">${fmt(D.nowcast.estimate,2)} %</div>
+      <div class="note">${D.nowcast.current_quarter} mezikvartálně</div></div>` : ''}
     <div class="big"><div class="lbl">Repo sazba za 1 rok</div>
       <div class="val">${fmt(h.repo_1y,2)} %</div>
       <div class="note">2T repo ČNB</div></div>
@@ -220,8 +223,6 @@ function render(D){
       <div class="hero" style="margin-bottom:18px">
         <div class="big"><div class="lbl">Nowcast ${N.current_quarter}</div>
           <div class="val">${fmt(N.estimate,2)} %</div><div class="note">mezikvartálně (QoQ)</div></div>
-        <div class="big"><div class="lbl">Výhled ${N.next_quarter||''}</div>
-          <div class="val">${fmt(N.next_estimate,2)} %</div><div class="note">QoQ</div></div>
         <div class="big"><div class="lbl">Posl. publikované HDP</div>
           <div class="val">${fmt(N.last_actual,2)} %</div><div class="note">${N.last_actual_q} (ČSÚ)</div></div>
       </div>
@@ -234,16 +235,16 @@ function render(D){
     app.appendChild(card);
 
     const H = N.history;
-    const fut = [N.current_quarter, N.next_quarter].filter(Boolean);
+    const fut = [N.current_quarter];   // nowcast = jen probíhající Q
     const labels = H.map(p=>p.q).concat(fut);
     new Chart(card.querySelector('#ncChart'), {
       type:'line',
       data:{labels, datasets:[
-        {label:'Skutečnost (ČSÚ)', data:H.map(p=>p.actual).concat(fut.map(()=>null)),
+        {label:'Skutečnost (ČSÚ)', data:H.map(p=>p.actual).concat([null]),
          borderColor:F.navy, borderWidth:2.4, pointRadius:0, tension:.25},
-        {label:'Model / nowcast', data:H.map(p=>p.model).concat([N.estimate, N.next_estimate].slice(0,fut.length)),
+        {label:'Model / nowcast', data:H.map(p=>p.model).concat([N.estimate]),
          borderColor:F.blue, borderWidth:2.4, borderDash:[6,3],
-         pointRadius:H.map(()=>0).concat(fut.map(()=>4)),
+         pointRadius:H.map(()=>0).concat([5]),
          pointBackgroundColor:F.blue, tension:.25},
       ]},
       options:{responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
