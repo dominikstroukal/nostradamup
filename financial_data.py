@@ -734,6 +734,18 @@ def _forecast_pribor_linked(
     }, index=fut)
 
 
+# Ladicí parametry prognózy nezaměstnanosti (kalibrovat backtestem, ne odhadem):
+#   _NAIRU_BLEND: váha nedávné úrovně (mean 4Q) vs robustní medián 12Q v NAIRU
+#   _MOMENTUM:    síla setrvačnosti nedávného trendu (0 = žádná)
+# KOMPROMIS (vědomě zvolený): čistá mean-reversion (0/0) má Theil U 0,82, ale
+# v rostoucím trendu obrací nezaměstnanost strmě dolů. Blend 0,5 + momentum 0,3
+# stojí backtest (U 0,82 -> 0,91, pořád poráží random walk), zato prognóza zkraje
+# nekopíruje trend do protisměru. Mean-reversion je edge modelu; víc kotvit na
+# aktuální úroveň znamená blížit se random walku (U -> 1).
+_NAIRU_BLEND = 0.5
+_MOMENTUM = 0.3
+
+
 def _forecast_unemployment(
     unempl: pd.Series,
     repo_path: list | None = None,
@@ -746,23 +758,29 @@ def _forecast_unemployment(
                                         # na sazby reaguje jen slabě)
 ) -> pd.DataFrame:
     """
-    Prognóza nezaměstnanosti: návrat k NAIRU + vliv měnové restrikce.
+    Prognóza nezaměstnanosti: návrat k NAIRU + setrvačnost trendu + restrikce.
 
     Trh práce se vrací k strukturální míře (NAIRU), ale restriktivní měnová
-    politika (repo nad neutrálem) ekonomiku chladí a tlačí nezaměstnanost
-    nad NAIRU. Při napjatém trhu a vysokých sazbách tak u neklesá, ale spíš
-    mírně roste k NAIRU - ne mechanická regrese k průměru bez ekonomiky.
-
-    NAIRU = strukturální míra, odhadnutá z dolního okolí nedávných hodnot
-    (trh je teď velmi napjatý, takže NAIRU je blízko nedávného minima).
+    politika (repo nad neutrálem) ekonomiku chladí a tlačí nezaměstnanost nad
+    NAIRU. NAIRU je blend medián 12Q (robustní) a mean 4Q (nedávná úroveň),
+    plus krátkodobá setrvačnost nedávného trendu, aby model rostoucí/klesající
+    u hned neobracel do protisměru (viz _NAIRU_BLEND, _MOMENTUM a jejich
+    backtestový kompromis výše).
     """
     vals = unempl.values.astype(float)
     current = float(vals[-1])
 
-    # NAIRU jako robustní strukturální podlaha: medián posledních 12Q.
-    # (Při velmi napjatém trhu je NAIRU blízko aktuální nízké úrovni.)
-    recent = vals[-12:] if len(vals) >= 12 else vals
-    nairu = float(np.median(recent))
+    # NAIRU: strukturální míra. Medián 12Q je robustní, ale v trendu zaostává
+    # (drží nízkou nezaměstnanost z doby o rok+ zpět). Blend: medián 12Q +
+    # nedávná úroveň (mean 4Q), aby kotva částečně sledovala aktuální stav.
+    med12 = float(np.median(vals[-12:])) if len(vals) >= 12 else current
+    mean4 = float(np.mean(vals[-4:])) if len(vals) >= 4 else current
+    nairu = _NAIRU_BLEND * mean4 + (1.0 - _NAIRU_BLEND) * med12
+
+    # SETRVAČNOST: nedávný trend pokračuje krátkodobě a odeznívá.
+    diffs = np.diff(vals[-5:]) if len(vals) >= 5 else np.diff(vals)
+    drift0 = _MOMENTUM * (float(np.mean(diffs)) if len(diffs) else 0.0)
+    decay = 0.6
 
     # Sigma z nedávných čtvrtletních změn
     window = min(8, len(vals) - 1)
@@ -778,7 +796,8 @@ def _forecast_unemployment(
             else:
                 rate_gap = 0.0
             u_target = nairu + policy_sensitivity * max(0.0, rate_gap)
-            level = level + speed * (u_target - level) + np.random.normal(0, sigma)
+            drift_t = drift0 * (decay ** t)   # setrvačnost trendu, odeznívá
+            level = level + speed * (u_target - level) + drift_t + np.random.normal(0, sigma)
             sims[s, t] = level
 
     fut = pd.date_range(start=unempl.index[-1] + pd.offsets.QuarterBegin(1),
