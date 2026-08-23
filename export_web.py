@@ -160,76 +160,20 @@ def build_payload(args) -> dict:
         "eurusd":    ("EUR/USD", "USD", "kurzy", False),
     }
 
-    # ── Poctivé rozdělení historie/prognózy per veličina ───────────────────
-    # Historie = jen skutečně pozorovaná data (obs_end). Vše po obs_end (včetně
-    # aktuálního Q) = prognóza s intervalem. Zastaralé veličiny (inflace, mzdy,
-    # EUR/CZK), u nichž je 2026 jen flat-forward, se PŘEPOČÍTAJÍ od jejich
-    # posledního pozorovaného Q, aby doplněné hodnoty nešly do historie.
-    present = forecast.index[0]
-    hz_end = forecast.index[-1]
-
-    def _fwd_path(hist_src, iv):
-        """Median cesta: pozorované pro Q před aktuálním, prognóza od aktuálního dál."""
-        idx = pd.date_range(macro.index[0], hz_end, freq="QS")
-        out = {}
-        for q in idx:
-            if q < present and q in hist_src.index:
-                out[q] = float(hist_src.loc[q])
-            elif q in iv.index:
-                out[q] = float(iv["median"].loc[q])
-        return pd.Series(out).sort_index()
-
-    P = {
-        "gdp":    _fwd_path(macro["gdp_qoq"], macro_iv["gdp_qoq"]),
-        "wages":  _fwd_path(macro["wages_yoy"], macro_iv["wages_yoy"]) if "wages_yoy" in macro_iv else None,
-        "pribor": _fwd_path(fin["pribor3m"], fin_iv["pribor3m"]) if "pribor3m" in fin_iv else None,
-        "repo":   _fwd_path(fin["repo_rate"], fin_iv["repo_rate"]) if "repo_rate" in fin_iv else None,
-        "eurczk": _fwd_path(fin["eurczk"], fin_iv["eurczk"]) if "eurczk" in fin_iv else None,
-        "unempl": _fwd_path(fin["unempl"], fin_iv["unempl"]) if "unempl" in fin_iv else None,
-    }
-
-    def _sl(path, start):
-        return path.loc[start:].tolist() if path is not None else None
-
-    from financial_data import _forecast_rw as _rw, _forecast_unemployment as _un
-
-    def _reforecast(var, oe):
-        """Přepočítá prognózu veličiny od oe+1 (poslední pozorované Q)."""
-        start = oe + pd.offsets.QuarterBegin(1)
-        n = len(pd.date_range(start, hz_end, freq="QS"))
-        if var in ("hicp_yoy", "cpi_yoy"):
-            return ar_forecast(macro[var].loc[:oe], steps=n, is_inflation=True, extend=False,
-                               pribor_path=_sl(P["pribor"], start), wages_path=_sl(P["wages"], start),
-                               gdp_path=_sl(P["gdp"], start), eurczk_path=_sl(P["eurczk"], start),
-                               anchoring=args.anchoring, expect_weight=args.expect_weight,
-                               erpt_coef=args.erpt_coef, housing_services_pressure=args.housing_pressure)
-        if var == "wages_yoy":
-            return ar_forecast(macro[var].loc[:oe], steps=n, is_wages=True, extend=False,
-                               unempl_path=_sl(P["unempl"], start), gdp_path=_sl(P["gdp"], start),
-                               phillips_convexity=args.phillips_convexity)
-        if var == "eurczk":
-            return _rw(fin[var].loc[:oe].dropna(), steps=n, extend=False)
-        if var == "unempl":
-            return _un(fin[var].loc[:oe].dropna(), steps=n, repo_path=_sl(P["repo"], start))
-        return None
-
+    # ── Historie + prognóza — VŠECHNY veličiny startují prognózou STEJNĚ ────
+    # Historie končí posledním KOMPLETNÍM čtvrtletím (macro/fin jsou tam
+    # zarovnané přes _extend_to_present), prognóza startuje AKTUÁLNÍM Q. Veličiny
+    # se zastaralými daty (mzdy, HICP, EUR/CZK, kde živý zdroj/záloha zaostává)
+    # mají posledních pár Q flat-forward v historii — cena za to, aby všechny
+    # prognózy začínaly STEJNÝM čtvrtletím (dnes), ne v minulosti.
     variables = {}
     for var, iv in {**macro_iv, **fin_iv}.items():
         label, unit, group, headline = META.get(var, (var, "", "ostatní", False))
         hist_src = macro[var] if var in macro.columns else (
             fin[var] if var in fin.columns else None)
-        oe = obs_end(var)
-        if hist_src is not None and oe < LAST_COMPLETE:
-            try:
-                rf = _reforecast(var, oe)
-                if rf is not None:
-                    iv = rf   # prognóza od oe+1 (pokrývá i doplněná 2026 Q s intervalem)
-            except Exception as e:
-                print(f"  (reforecast {var}: {e})")
-        hist = hist_src.loc[:oe] if hist_src is not None else None
         variables[var] = {
             "label": label, "unit": unit, "group": group, "headline": headline,
-            "history": _hist(hist) if hist is not None else [],
+            "history": _hist(hist_src) if hist_src is not None else [],
             "forecast": _ser(iv),
         }
 
