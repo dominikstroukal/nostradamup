@@ -277,6 +277,42 @@ def build_payload(args) -> dict:
 
     annual = _annual_table()
 
+    # ── Realizované roky: OFICIÁLNÍ roční data z Eurostatu ─────────────────
+    # Náš dopočet z kvartálů driftuje (řetězení zaokrouhlených QoQ), takže
+    # "skutečnost" nesedí s ČSÚ/MF. U hotových let bereme oficiální roční
+    # hodnotu (nama_10_gdp/A, une_rt_a) – ta je autoritativní.
+    def _official_annual():
+        import requests as _rq
+        base = ("https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/")
+        specs = {
+            "gdp_yoy": ("nama_10_gdp", "unit=CLV_PCH_PRE&na_item=B1GQ", 1),
+            "unempl":  ("une_rt_a", "age=Y15-74&unit=PC_ACT&sex=T", 1),
+        }
+        out = {}
+        for var, (ds, params, dec) in specs.items():
+            try:
+                js = _rq.get(f"{base}{ds}?format=JSON&lang=EN&freq=A&{params}&geo=CZ"
+                             f"&sinceTimePeriod=2018", timeout=30,
+                             headers={"Accept": "application/json"}).json()
+                inv = {v: k for k, v in js["dimension"]["time"]["category"]["index"].items()}
+                out[var] = {inv[int(k)]: round(float(v), dec) for k, v in js.get("value", {}).items()}
+            except Exception:
+                pass
+        return out
+
+    try:
+        off = _official_annual()
+        realized = [y for y in annual["years"] if y not in set(annual.get("forecast_years", []))]
+        for r in annual["rows"]:
+            ov = off.get(r["var"])
+            if ov:
+                for y in realized:
+                    if y in ov:
+                        r["values"][y] = ov[y]
+        print(f"  oficiální roční data pro realizované roky: {realized}")
+    except Exception as e:
+        print(f"  (oficiální roční data přeskočena: {e})")
+
     # ── Srovnání s MF ČR (automaticky stažená predikce) ────────────────────
     # ČNB/ČBA publikují jen PDF (bez API), proto nejsou. Graceful: výpadek
     # jen vynechá srovnání, neshodí export.
