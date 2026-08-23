@@ -257,6 +257,48 @@ def _fallback_wages() -> pd.Series:
 
 
 # ─────────────────────────────────────────────
+# 3b. ČSÚ – národní index spotřebitelských cen (CPI)
+# ─────────────────────────────────────────────
+
+_CSU_CPI_CSV   = "https://data.csu.gov.cz/opendata/sady/WCEN01M/distribuce/csv"
+_CSU_CPI_VYBER = "https://data.csu.gov.cz/api/dotaz/v1/data/vybery/WCEN01MT01"
+
+
+def fetch_csu_cpi() -> pd.Series:
+    """Měsíční meziroční míra inflace NÁRODNÍHO CPI (ČSÚ), v %.
+
+    Ukazatel 6134IPAC ('stejné období předchozího roku = 100'), inflace =
+    hodnota − 100. Historie z opendata CSV (od 2000), aktuální měsíce (vč.
+    běžného roku) doplněné z živého předdefinovaného výběru. Toto je index,
+    který cíluje ČNB (2 %) a reportuje MF ČR — ne HICP z Eurostatu.
+    """
+    from io import BytesIO
+    log.info("ČSÚ ← národní CPI (opendata CSV + živý výběr)")
+    r = requests.get(_CSU_CPI_CSV, timeout=90)
+    r.raise_for_status()
+    df = pd.read_csv(BytesIO(r.content))
+    d = df[(df["IndicatorType"] == "6134IPAC") & (df["Uz0"] == "CZ")]
+    s = pd.Series((d["Hodnota"].astype(float) - 100.0).values,
+                  index=pd.to_datetime(d["CasM"] + "-01"), name="cpi_yoy").sort_index()
+    # Aktuální tail z živého výběru (opendata CSV bývá o pár měsíců pozadu).
+    try:
+        j = requests.get(_CSU_CPI_VYBER, timeout=40,
+                         headers={"Accept": "application/json"}).json()
+        cas = list(j["dimension"]["CasM"]["category"]["index"].items())
+        ipac = j["dimension"]["IndicatorType"]["category"]["index"]["6134IPAC"]
+        nC = len(cas)
+        val = j["value"]
+        for code, ci in cas:
+            k = ipac * nC + ci   # rozměr [Uz0(1), IndicatorType, CasM]
+            v = val.get(str(k)) if isinstance(val, dict) else (val[k] if k < len(val) else None)
+            if v is not None:
+                s.loc[pd.Timestamp(code + "-01")] = float(v) - 100.0
+    except Exception as e:
+        log.info("  (živý výběr CPI přeskočen: %s)", e)
+    return s.sort_index()
+
+
+# ─────────────────────────────────────────────
 # 4.  Sestavení datových rámců
 # ─────────────────────────────────────────────
 
@@ -274,9 +316,13 @@ def build_cz_dataset() -> pd.DataFrame:
         hicp = fetch_eurostat("prc_hicp_manr", "M.RCH_A.CP00.CZ", "hicp")
         hicp_yoy = hicp.resample("QS").mean()
         hicp_yoy.name = "hicp_yoy"
-        # CPI ČSÚ – stejný dataset (ČNB používá HICP jako proxy CPI)
-        cpi_raw = fetch_eurostat("prc_hicp_manr", "M.RCH_A.CP00.CZ", "cpi_yoy")
-        cpi_yoy = cpi_raw.resample("QS").mean()
+        # CPI = NÁRODNÍ index spotřebitelských cen (ČSÚ) – to cíluje ČNB a
+        # reportuje MF, ne HICP. Fallback na HICP, když ČSÚ nedostupné.
+        try:
+            cpi_yoy = fetch_csu_cpi().resample("QS").mean()
+        except Exception as _ce:
+            log.info("ČSÚ CPI nedostupné (%s) – fallback HICP.", _ce)
+            cpi_yoy = fetch_eurostat("prc_hicp_manr", "M.RCH_A.CP00.CZ", "cpi_yoy").resample("QS").mean()
         cpi_yoy.name = "cpi_yoy"
     except Exception as e:
         log.info("Eurostat API nedostupné (%s) – používám demo data.", e)
