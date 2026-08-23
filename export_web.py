@@ -284,10 +284,14 @@ def build_payload(args) -> dict:
         from external_forecasts import fetch_mf_forecast
         mf = fetch_mf_forecast()
         if mf:
+            # Srovnání jen na PROGNÓZNÍCH letech. Minulé roky jsou skutečnost
+            # (settled) – tam je případný rozdíl jen šum mezi zdroji (Eurostat
+            # vs ČSÚ), ne neshoda prognóz, takže MF u nich nezobrazujeme.
+            fy = set(annual.get("forecast_years", []))
             for r in annual["rows"]:
                 mv = mf["values"].get(r["var"])
                 if mv:
-                    r["mf"] = {y: mv[y] for y in annual["years"] if y in mv}
+                    r["mf"] = {y: mv[y] for y in annual["years"] if y in mv and y in fy}
             annual["external"] = {"mf": {"label": mf["label"], "date": mf["date"]}}
             print(f"  srovnání MF: {mf['label']}")
     except Exception as e:
