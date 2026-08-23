@@ -270,12 +270,28 @@ def build_payload(args) -> dict:
                 vals[str(y)] = round(float(x), dec)
                 # rok je "prognóza", pokud aspoň jedno čtvrtletí je z prognózy
                 actual_end[y] = actual_end.get(y, True) and not any(is_fc[ym] for ym, _ in qs)
-            rows.append({"label": label, "unit": unit, "dec": dec, "values": vals})
+            rows.append({"var": var, "label": label, "unit": unit, "dec": dec, "values": vals})
         shown = [str(y) for y in years if any(str(y) in r["values"] for r in rows)]
         forecast_years = [str(y) for y in years if not actual_end.get(y, True)]
         return {"years": shown, "rows": rows, "forecast_years": forecast_years}
 
     annual = _annual_table()
+
+    # ── Srovnání s MF ČR (automaticky stažená predikce) ────────────────────
+    # ČNB/ČBA publikují jen PDF (bez API), proto nejsou. Graceful: výpadek
+    # jen vynechá srovnání, neshodí export.
+    try:
+        from external_forecasts import fetch_mf_forecast
+        mf = fetch_mf_forecast()
+        if mf:
+            for r in annual["rows"]:
+                mv = mf["values"].get(r["var"])
+                if mv:
+                    r["mf"] = {y: mv[y] for y in annual["years"] if y in mv}
+            annual["external"] = {"mf": {"label": mf["label"], "date": mf["date"]}}
+            print(f"  srovnání MF: {mf['label']}")
+    except Exception as e:
+        print(f"  (srovnání MF přeskočeno: {e})")
 
     # ── Headline čísla (inflace 1Y a 3Y = jádro sdělení) ────────────────────
     def _at(var, q):
