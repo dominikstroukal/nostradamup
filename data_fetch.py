@@ -299,6 +299,41 @@ def fetch_csu_cpi() -> pd.Series:
 
 
 # ─────────────────────────────────────────────
+# 3c. ČSÚ – průměrná hrubá měsíční mzda (meziroční růst)
+# ─────────────────────────────────────────────
+
+_CSU_WAGES_CSV = "https://data.csu.gov.cz/opendata/sady/MZDQ1/distribuce/csv"
+
+
+def fetch_csu_wages() -> pd.Series:
+    """Čtvrtletní meziroční růst průměrné hrubé měsíční mzdy (ČSÚ), v %.
+
+    Národní úhrn (celé hospodářství A-S, všechny velikosti podniků), ukazatel
+    'meziroční index (%)' → růst = index − 100. Živá záloha ČNB ARAD nemá API,
+    proto tohle. Historie od 2001.
+    """
+    from io import BytesIO
+    log.info("ČSÚ ← průměrná mzda (opendata CSV)")
+    r = requests.get(_CSU_WAGES_CSV, timeout=90)
+    r.raise_for_status()
+    df = pd.read_csv(BytesIO(r.content), low_memory=False)
+    m = (df["Ukazatel"].astype(str).str.contains("mzda", case=False)
+         & df["Ukazatel"].astype(str).str.contains("meziroční index"))
+    d = df[m & (df["CZNACEMZDY"] == "A-S") & (df["KATPMZD"] == 0)
+           & (df["ISEKTORMZDH.ISEKTOR2"] == 0) & (df["Uz0123vm.STAT"] == "CZ")
+           & (df["Uz0123vm.REGION"].isna()) & (df["ISEKTORMZDH.ISEKTOR5"].isna())
+           & (df["ZJIST"] == 0)].drop_duplicates("CasQ")
+
+    def _q(code):  # "2026-Q1" -> Timestamp
+        y, q = str(code).split("-Q")
+        return pd.Timestamp(f"{y}-{(int(q) - 1) * 3 + 1:02d}-01")
+
+    s = pd.Series((d["Hodnota"].astype(float) - 100.0).values,
+                  index=[_q(c) for c in d["CasQ"]], name="wages_yoy").sort_index()
+    return s
+
+
+# ─────────────────────────────────────────────
 # 4.  Sestavení datových rámců
 # ─────────────────────────────────────────────
 
@@ -331,8 +366,13 @@ def build_cz_dataset() -> pd.DataFrame:
         gdp_yoy_raw = gdp_raw.rolling(4).sum()
         gdp_yoy_raw.name = "gdp_yoy"
 
-    wages = fetch_cnb_wages()
-    wages_yoy = wages.pct_change(4) * 100
+    # Mzdy: národní průměrná hrubá mzda z ČSÚ (meziroční růst). Fallback na
+    # ČNB ARAD / záložní úrovně, když ČSÚ nedostupné.
+    try:
+        wages_yoy = fetch_csu_wages()
+    except Exception as _we:
+        log.info("ČSÚ mzdy nedostupné (%s) – fallback ČNB/záloha.", _we)
+        wages_yoy = (fetch_cnb_wages().pct_change(4) * 100)
     wages_yoy.name = "wages_yoy"
 
     df = pd.DataFrame({
