@@ -233,6 +233,50 @@ def build_payload(args) -> dict:
             "forecast": _ser(iv),
         }
 
+    # ── Roční (kalendářní) prognóza — srovnatelná s ČBA/ČNB/MF/KB ────────────
+    # Růstové/inflační veličiny = průměr 4 kvartálů roku; sazby = konec roku.
+    # Kombinuje skutečnost (historie) + prognózu; jen kompletní roky (4 Q).
+    ANNUAL_ROWS = [
+        ("gdp_yoy",   "HDP – reálný růst",       "%",   "mean", 1),
+        ("cpi_yoy",   "Inflace CPI – průměr",    "%",   "mean", 1),
+        ("unempl",    "Nezaměstnanost – průměr", "%",   "mean", 1),
+        ("wages_yoy", "Mzdy nominální – růst",   "%",   "mean", 1),
+        ("repo_rate", "2T repo ČNB – konec roku","%",   "eoy",  2),
+        ("pribor3m",  "PRIBOR 3M – průměr",      "%",   "mean", 2),
+        ("eurczk",    "EUR/CZK – průměr",        "CZK", "mean", 1),
+    ]
+
+    def _annual_table():
+        # kandidátní roky: od posledního plně skutečného roku po konec prognózy
+        this_year = datetime.date.today().year
+        years = [this_year - 1, this_year, this_year + 1, this_year + 2]
+        actual_end = {}  # rok -> je plně skutečný? (pro označení prognózních)
+        rows = []
+        for var, label, unit, agg, dec in ANNUAL_ROWS:
+            if var not in variables:
+                continue
+            v = variables[var]
+            series, is_fc = {}, {}
+            for p in v["history"]:
+                series[p["date"][:7]] = p["value"]; is_fc[p["date"][:7]] = False
+            for p in v["forecast"]:
+                series[p["date"][:7]] = p["median"]; is_fc[p["date"][:7]] = True
+            vals = {}
+            for y in years:
+                qs = sorted((ym, val) for ym, val in series.items() if int(ym[:4]) == y)
+                if len(qs) < 4:
+                    continue
+                x = qs[-1][1] if agg == "eoy" else sum(val for _, val in qs) / len(qs)
+                vals[str(y)] = round(float(x), dec)
+                # rok je "prognóza", pokud aspoň jedno čtvrtletí je z prognózy
+                actual_end[y] = actual_end.get(y, True) and not any(is_fc[ym] for ym, _ in qs)
+            rows.append({"label": label, "unit": unit, "dec": dec, "values": vals})
+        shown = [str(y) for y in years if any(str(y) in r["values"] for r in rows)]
+        forecast_years = [str(y) for y in years if not actual_end.get(y, True)]
+        return {"years": shown, "rows": rows, "forecast_years": forecast_years}
+
+    annual = _annual_table()
+
     # ── Headline čísla (inflace 1Y a 3Y = jádro sdělení) ────────────────────
     def _at(var, q):
         try:
@@ -316,6 +360,7 @@ def build_payload(args) -> dict:
         "parameters": {k: v for k, v in vars(args).items()
                        if k not in ("out", "no_history", "no_nowcast")},
         "headline": headline,
+        "annual": annual,
         "nowcast": nowcast,
         "variables": variables,
         "decomposition": decomp,

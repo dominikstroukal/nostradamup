@@ -113,6 +113,23 @@ function render(D){
       <div class="note">2T repo ČNB</div></div>
   </div>`));
 
+  // ── Roční prognóza (kalendářní roky, srovnatelné s ČBA/ČNB/MF) ────────
+  if (D.annual && D.annual.rows && D.annual.rows.length) {
+    const A = D.annual, fc = new Set(A.forecast_years || []);
+    const head = A.years.map(y =>
+      `<th style="text-align:right">${y}${fc.has(y)?'':' <span style="font-weight:400;color:var(--muted)">skut.</span>'}</th>`).join('');
+    const body = A.rows.map(r =>
+      `<tr><td style="font-family:inherit;color:var(--navy);white-space:normal">${r.label}</td>` +
+      A.years.map(y => `<td class="num">${r.values[y]!==undefined?fmt(r.values[y], r.dec)+(r.unit==='%'?' %':''):'—'}</td>`).join('') +
+      `</tr>`).join('');
+    app.appendChild(el(`<div class="card"><h2>Roční prognóza</h2>
+      <p class="hint">Kalendářní roky pro srovnání s ČBA, ČNB, MF ČR a bankami.
+      Růst a inflace = průměr roku, sazby = konec roku.
+      ${(A.forecast_years||[]).length?`Prognóza: ${A.forecast_years.join(', ')} (dřívější roky skutečnost).`:''}</p>
+      <div style="overflow-x:auto"><table><thead><tr><th>Veličina</th>${head}</tr></thead>
+      <tbody>${body}</tbody></table></div></div>`));
+  }
+
   // ── Prognózy: záložky se generují Z DAT (nic natvrdo) ─────────────────
   const vars = D.variables || {};
   const keys = Object.keys(vars).sort((a,b) =>
