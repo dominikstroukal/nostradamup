@@ -70,10 +70,18 @@ def build_payload(args) -> dict:
     LAST_OBS = {k: pd.Timestamp(v) for k, v in load_last_obs().items()}
     LAST_COMPLETE = macro.index[-1]   # poslední kompletní Q (např. 2026Q2)
 
+    # Veličiny, jejichž ZDROJ ze své podstaty zaostává za posledním kompletním
+    # Q (ČSÚ zveřejní mzdy/nezaměstnanost až po Q1, Eurostat HICP je pozadu).
+    # Jen ty smějí mít prognózu startující dřív než aktuální Q. Ostatní veličiny
+    # jsou vždy aktuální do posledního kompletního Q – i kdyby byl last_obs.json
+    # zastaralý, netvoříme u nich mezeru mezi historií a prognózou.
+    _LAGGING = {"wages_yoy", "unempl", "hicp_yoy"}
+
     def obs_end(var):
-        """Poslední pozorované Q veličiny, zastropované na poslední kompletní Q."""
-        lo = LAST_OBS.get(var, LAST_COMPLETE)
-        return min(lo, LAST_COMPLETE)
+        """Poslední SKUTEČNĚ pozorované Q veličiny, zastropované na kompletní Q."""
+        if var not in _LAGGING:
+            return LAST_COMPLETE
+        return min(LAST_OBS.get(var, LAST_COMPLETE), LAST_COMPLETE)
 
     # ── Nowcast HDP: kotva aktuálního čtvrtletí ────────────────────────────
     # Nowcast (z měsíčních indikátorů) přepíše první prognózní bod HDP
@@ -160,20 +168,72 @@ def build_payload(args) -> dict:
         "eurusd":    ("EUR/USD", "USD", "kurzy", False),
     }
 
-    # ── Historie + prognóza — VŠECHNY veličiny startují prognózou STEJNĚ ────
-    # Historie končí posledním KOMPLETNÍM čtvrtletím (macro/fin jsou tam
-    # zarovnané přes _extend_to_present), prognóza startuje AKTUÁLNÍM Q. Veličiny
-    # se zastaralými daty (mzdy, HICP, EUR/CZK, kde živý zdroj/záloha zaostává)
-    # mají posledních pár Q flat-forward v historii — cena za to, aby všechny
-    # prognózy začínaly STEJNÝM čtvrtletím (dnes), ne v minulosti.
+    # ── Poctivé zarovnání: prognóza každé veličiny startuje jejím posledním
+    #    SKUTEČNÝM čtvrtletím, ne uniformně aktuálním Q ──────────────────────
+    # Historie ukazuje jen skutečně pozorovaná Q (do obs_end). Veličiny, jejichž
+    # živý zdroj zaostává (mzdy a nezaměstnanost = ČSÚ zveřejní až Q1, HICP =
+    # Eurostat pozadu), se přeforecastují od reálného okraje, aby se flat-forward
+    # NEzobrazoval jako skutečnost a model sám vyplnil mezeru. Ostatní veličiny
+    # jsou reálné do posledního kompletního Q, jejich prognóza startuje aktuálním
+    # Q beze změny. Pořadí přeforecastu = pořadí závislostí (nezam. → mzdy → HICP).
+    END = forecast.index[-1]
+    _all_iv = {**macro_iv, **fin_iv}
+
+    def _real(var):
+        src = macro[var] if var in macro.columns else fin[var]
+        return src.loc[:obs_end(var)].dropna()
+
+    def _grid(var):
+        return pd.date_range(obs_end(var) + pd.offsets.QuarterBegin(1), END, freq="QS")
+
+    def _path_on(driver, grid):
+        """Driver (skutečnost do obs_end + medián prognózy) zarovnaný na grid dle data."""
+        iv = _all_iv.get(driver)
+        parts = [_real(driver)]
+        if iv is not None:
+            parts.append(iv["median"][iv["median"].index > obs_end(driver)])
+        s = pd.concat(parts).sort_index()
+        return list(s.reindex(grid).ffill().bfill().values)
+
+    def _lags(var):
+        return obs_end(var) < LAST_COMPLETE
+
+    # 1) Nezaměstnanost (driver mezd přes Phillipsovu křivku).
+    if "unempl" in fin.columns and _lags("unempl"):
+        from financial_data import _forecast_unemployment
+        g = _grid("unempl")
+        fin_iv["unempl"] = _forecast_unemployment(
+            _real("unempl"), repo_path=_path_on("repo_rate", g),
+            steps=len(g), neutral_rate=3.5)
+        _all_iv["unempl"] = fin_iv["unempl"]
+
+    # 2) Mzdy (potřebují nezaměstnanost + HDP).
+    if "wages_yoy" in macro.columns and _lags("wages_yoy"):
+        g = _grid("wages_yoy")
+        macro_iv["wages_yoy"] = ar_forecast(
+            _real("wages_yoy"), steps=len(g), is_wages=True, extend=False,
+            unempl_path=_path_on("unempl", g), gdp_path=_path_on("gdp_qoq", g),
+            phillips_convexity=args.phillips_convexity)
+        _all_iv["wages_yoy"] = macro_iv["wages_yoy"]
+
+    # 3) HICP (mzdy, sazby, kurz, HDP).
+    if "hicp_yoy" in macro.columns and _lags("hicp_yoy"):
+        g = _grid("hicp_yoy")
+        macro_iv["hicp_yoy"] = ar_forecast(
+            _real("hicp_yoy"), steps=len(g), is_inflation=True, extend=False,
+            pribor_path=_path_on("pribor3m", g), wages_path=_path_on("wages_yoy", g),
+            gdp_path=_path_on("gdp_qoq", g), eurczk_path=_path_on("eurczk", g),
+            anchoring=args.anchoring, expect_weight=args.expect_weight,
+            erpt_coef=args.erpt_coef,
+            housing_services_pressure=args.housing_pressure)
+        _all_iv["hicp_yoy"] = macro_iv["hicp_yoy"]
+
     variables = {}
     for var, iv in {**macro_iv, **fin_iv}.items():
         label, unit, group, headline = META.get(var, (var, "", "ostatní", False))
-        hist_src = macro[var] if var in macro.columns else (
-            fin[var] if var in fin.columns else None)
         variables[var] = {
             "label": label, "unit": unit, "group": group, "headline": headline,
-            "history": _hist(hist_src) if hist_src is not None else [],
+            "history": _hist(_real(var)),
             "forecast": _ser(iv),
         }
 
