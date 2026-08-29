@@ -333,6 +333,31 @@ def fetch_csu_wages() -> pd.Series:
     return s
 
 
+_CSU_HICP_CSV = "https://data.csu.gov.cz/opendata/sady/CEN0101M/distribuce/csv"
+
+
+def fetch_csu_hicp() -> pd.Series:
+    """Měsíční meziroční změna HICP (%) z ČSÚ opendata (CEN0101M).
+
+    Harmonizovaný index spotřebitelských cen, úhrn (COICOP2018=0), meziroční
+    přírůstek (TYPUDAJE4B='RR'). ČSÚ je PRIMÁRNÍ zdroj CZ HICP (Eurostat ho
+    jen přebírá); Eurostat statistics API u prc_hicp_manr zaostává (zasekl se
+    na prosinci 2025), zatímco ČSÚ má aktuální měsíce. Historie od 2015.
+    """
+    from io import BytesIO
+    log.info("ČSÚ ← HICP (opendata CSV)")
+    r = requests.get(_CSU_HICP_CSV, timeout=120)
+    r.raise_for_status()
+    df = pd.read_csv(BytesIO(r.content), low_memory=False)
+    d = df[(df["TYPUDAJE4B"] == "RR")
+           & (df["COICOP2018"].astype(str) == "0")
+           & (df["Uz0"] == "CZ")].drop_duplicates("CASRMX")
+    idx = pd.to_datetime(d["CASRMX"].astype(str) + "-01")
+    s = pd.Series(d["Hodnota"].astype(float).values, index=idx,
+                  name="hicp_yoy").sort_index()
+    return s
+
+
 # ─────────────────────────────────────────────
 # 4.  Sestavení datových rámců
 # ─────────────────────────────────────────────
@@ -346,10 +371,22 @@ def build_cz_dataset() -> pd.DataFrame:
         # HDP YoY = 4Q rolling součet QoQ (dataset nemá přímou YoY sérii pro tyto dimenze)
         gdp_yoy_raw = gdp_raw.rolling(4).sum()
         gdp_yoy_raw.name = "gdp_yoy"
-        # POZOR: prc_hicp_manr UŽ JE meziroční míra změny (RCH_A = rate of change, annual).
-        # Nesmí se na ni aplikovat pct_change – jen převést na čtvrtletní průměr.
-        hicp = fetch_eurostat("prc_hicp_manr", "M.RCH_A.CP00.CZ", "hicp")
-        hicp_yoy = hicp.resample("QS").mean()
+        # HICP = harmonizovaný index z ČSÚ (primární zdroj CZ HICP; Eurostat ho
+        # jen přebírá a jeho statistics API zaostává – zaseklé na 12/2025).
+        # Fallback na Eurostat prc_hicp_manr (RCH_A = už meziroční míra změny,
+        # jen čtvrtletní průměr), když ČSÚ nedostupné.
+        try:
+            hicp_yoy = fetch_csu_hicp().resample("QS").mean()
+            # ČSÚ řada RR začíná 2015; starší historii (<2015) doplň z Eurostatu,
+            # ať se dataset nezkrátí. ČSÚ má přednost (aktuální měsíce).
+            try:
+                eu_hicp = fetch_eurostat("prc_hicp_manr", "M.RCH_A.CP00.CZ", "hicp").resample("QS").mean()
+                hicp_yoy = hicp_yoy.combine_first(eu_hicp)
+            except Exception:
+                pass
+        except Exception as _he:
+            log.info("ČSÚ HICP nedostupné (%s) – fallback Eurostat.", _he)
+            hicp_yoy = fetch_eurostat("prc_hicp_manr", "M.RCH_A.CP00.CZ", "hicp").resample("QS").mean()
         hicp_yoy.name = "hicp_yoy"
         # CPI = NÁRODNÍ index spotřebitelských cen (ČSÚ) – to cíluje ČNB a
         # reportuje MF, ne HICP. Fallback na HICP, když ČSÚ nedostupné.
