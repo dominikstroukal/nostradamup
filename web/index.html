@@ -71,6 +71,17 @@ const F = {
 const el = (h) => { const d=document.createElement('div'); d.innerHTML=h.trim(); return d.firstChild; };
 const qLabel = (iso) => { const d=new Date(iso); return d.getFullYear()+'Q'+(Math.floor(d.getMonth()/3)+1); };
 const fmt = (v,dec=1) => v===null||v===undefined?'—':Number(v).toFixed(dec);
+const MES = ['leden','únor','březen','duben','květen','červen',
+             'červenec','srpen','září','říjen','listopad','prosinec'];
+const MES_GEN = ['ledna','února','března','dubna','května','června',
+                 'července','srpna','září','října','listopadu','prosince'];
+// "2026-08" -> "srpen 2026"
+const mname = (s) => { if(!s) return ''; const [y,m]=s.split('-');
+  return `${MES[Number(m)-1]||m} ${y}`; };
+// "2026-08" -> "srpna" (2. pád, do věty)
+const mgen = (s) => { if(!s) return ''; const m=Number(s.split('-')[1]);
+  return MES_GEN[m-1]||''; };
+const tydny = (n) => n===1 ? '1 týden' : (n>=2&&n<=4 ? `${n} týdny` : `${n} týdnů`);
 
 fetch('data/latest.json?_=' + Date.now())
   .then(r => { if(!r.ok) throw new Error('data/latest.json nenalezen'); return r.json(); })
@@ -108,6 +119,9 @@ function render(D){
     ${D.nowcast ? `<div class="big"><div class="lbl">HDP nyní · nowcast</div>
       <div class="val">${fmt(D.nowcast.estimate,2)} %</div>
       <div class="note">${D.nowcast.current_quarter} mezikvartálně</div></div>` : ''}
+    ${D.cpi_nowcast ? `<div class="big"><div class="lbl">Inflace ${mname(D.cpi_nowcast.target_month)} · nowcast</div>
+      <div class="val">${fmt(D.cpi_nowcast.yoy)} %</div>
+      <div class="note">meziročně, než ČSÚ zveřejní</div></div>` : ''}
     <div class="big"><div class="lbl">Repo sazba za 1 rok</div>
       <div class="val">${fmt(h.repo_1y,2)} %</div>
       <div class="note">2T repo ČNB</div></div>
@@ -289,6 +303,57 @@ function render(D){
           tooltip:{callbacks:{label:c=>(c.parsed.x>=0?'+':'')+fmt(c.parsed.x,3)+' pp'}}},
         scales:{x:{grid:{color:'#E8ECF5'},title:{display:true,text:'procentní body'},ticks:{font:{size:11}}},
                 y:{grid:{display:false},ticks:{font:{size:11}}}}}
+    });
+  }
+
+  // ── Nowcast měsíční inflace (měsíc, který ČSÚ ještě nezveřejnil) ──────
+  if (D.cpi_nowcast) {
+    const P = D.cpi_nowcast, B = P.backtest || {};
+    const dev = P.mom - P.seasonal_norm;
+    const card = el(`<div class="card"><h2>Nowcast inflace — příští zveřejnění</h2>
+      <p class="hint">Odhad indexu spotřebitelských cen za měsíc, který ČSÚ ještě nezveřejnil.
+      Staví na tom, že ceny pohonných hmot se šetří <b>týdně</b>, tedy s předstihem před CPI.
+      Model neodhaduje meziroční inflaci přímo (ta je z velké části daná loňskou základnou),
+      ale <b>meziměsíční</b> změnu, a z ní se meziroční dopočítá přes bazický index.</p>
+      <div class="hero" style="margin-bottom:18px">
+        <div class="big"><div class="lbl">Inflace ${mname(P.target_month)}</div>
+          <div class="val">${fmt(P.yoy)} %</div>
+          <div class="note">meziročně (${fmt(P.yoy_lower)} až ${fmt(P.yoy_upper)})</div></div>
+        <div class="big"><div class="lbl">Meziměsíčně</div>
+          <div class="val">${P.mom>=0?'+':''}${fmt(P.mom,2)} %</div>
+          <div class="note">sezónní norma ${P.seasonal_norm>=0?'+':''}${fmt(P.seasonal_norm,2)} %</div></div>
+        <div class="big"><div class="lbl">Posl. zveřejněno</div>
+          <div class="val">${fmt(P.last_actual_yoy)} %</div>
+          <div class="note">${mname(P.last_actual_month)} (ČSÚ)</div></div>
+      </div>
+      <p class="hint"><b>Proč ${dev>=0?'nad':'pod'} sezónní normou:</b> ceny pohonných hmot
+      ${P.fuel_mom>=0?'vzrostly':'klesly'} o ${fmt(Math.abs(P.fuel_mom),1)} % m/m
+      (${tydny(P.fuel_weeks)} šetření${P.fuel_complete?', úplný měsíc':', měsíc ještě běží → širší interval'}),
+      což posouvá odhad o ${dev>=0?'+':''}${fmt(dev,2)} pp proti obvyklému průběhu ${mgen(P.target_month)}.</p>
+      <div class="chart sm"><canvas id="cpiNcChart"></canvas></div>
+      <p class="hint" style="margin-top:18px">Backtest v současném cenovém režimu (${B.n} měsíců):
+      chyba ${fmt(B.rmse,2)} pp vs. ${fmt(B.rmse_seasonal,2)} pp u pouhé sezónní normy
+      (Theil U ${fmt(B.theil_u,2)}), směrová shoda ${B.directional!=null?Math.round(B.directional*100):'—'} %.
+      Model tedy sezónní normu poráží, ale cenový šok typu 2022 z cen benzinu předpovědět nelze.</p></div>`);
+    app.appendChild(card);
+
+    const H = P.history || [];
+    const labels = H.map(p=>mname(p.month).split(' ')[0]).concat([mname(P.target_month).split(' ')[0]]);
+    new Chart(card.querySelector('#cpiNcChart'), {
+      type:'line',
+      data:{labels, datasets:[
+        {label:'Skutečnost (ČSÚ)', data:H.map(p=>p.actual).concat([null]),
+         borderColor:F.navy, borderWidth:2.4, pointRadius:0, tension:.25},
+        {label:'Model / nowcast', data:H.map(p=>p.model).concat([P.mom]),
+         borderColor:F.blue, borderWidth:2.4, borderDash:[6,3],
+         pointRadius:H.map(()=>0).concat([5]),
+         pointBackgroundColor:F.blue, tension:.25},
+      ]},
+      options:{responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+        plugins:{legend:{labels:{boxWidth:12,font:{size:11}}},
+          tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.parsed.y,2)+' %'}}},
+        scales:{y:{grid:{color:'#E8ECF5'},title:{display:true,text:'CPI meziměsíčně (%)'},ticks:{font:{size:11}}},
+                x:{grid:{display:false},ticks:{font:{size:10}}}}}
     });
   }
 

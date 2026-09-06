@@ -11,3 +11,6 @@ outputs/
 
 # Interní kontext pro Claude Code (osobní poznámky, mimo veřejný repo)
 CLAUDE.md
+
+# lokální nastavení Claude Code (nepatří do veřejného repa)
+.claude/

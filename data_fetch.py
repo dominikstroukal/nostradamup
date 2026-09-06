@@ -264,38 +264,105 @@ _CSU_CPI_CSV   = "https://data.csu.gov.cz/opendata/sady/WCEN01M/distribuce/csv"
 _CSU_CPI_VYBER = "https://data.csu.gov.cz/api/dotaz/v1/data/vybery/WCEN01MT01"
 
 
-def fetch_csu_cpi() -> pd.Series:
-    """Měsíční meziroční míra inflace NÁRODNÍHO CPI (ČSÚ), v %.
+_CSU_CPI_INDICATORS = {
+    "6134J01":  "mom",   # předchozí měsíc = 100
+    "6134IPAC": "yoy",   # stejné období předchozího roku = 100
+    "6134IPAZ": "idx",   # průměr roku 2015 = 100 (bazický index)
+}
 
-    Ukazatel 6134IPAC ('stejné období předchozího roku = 100'), inflace =
-    hodnota − 100. Historie z opendata CSV (od 2000), aktuální měsíce (vč.
-    běžného roku) doplněné z živého předdefinovaného výběru. Toto je index,
-    který cíluje ČNB (2 %) a reportuje MF ČR — ne HICP z Eurostatu.
+
+def fetch_csu_cpi_monthly() -> pd.DataFrame:
+    """Měsíční národní CPI (ČSÚ): sloupce mom, yoy [%] a idx (2015 = 100).
+
+    Jeden průchod přes opendata CSV (historie od 1997) + živý předdefinovaný
+    výběr, který dotáhne aktuální měsíce (CSV bývá do konce minulého roku).
+    Bazický index je tu proto, aby šlo z meziměsíční změny přesně dopočítat
+    meziroční (viz nowcast_cpi.py); z meziročních hodnot to nejde.
     """
     from io import BytesIO
-    log.info("ČSÚ ← národní CPI (opendata CSV + živý výběr)")
+    log.info("ČSÚ ← národní CPI měsíčně (opendata CSV + živý výběr)")
     r = requests.get(_CSU_CPI_CSV, timeout=90)
     r.raise_for_status()
     df = pd.read_csv(BytesIO(r.content))
-    d = df[(df["IndicatorType"] == "6134IPAC") & (df["Uz0"] == "CZ")]
-    s = pd.Series((d["Hodnota"].astype(float) - 100.0).values,
-                  index=pd.to_datetime(d["CasM"] + "-01"), name="cpi_yoy").sort_index()
+    df = df[df["Uz0"] == "CZ"]
+    cols = {}
+    for it, col in _CSU_CPI_INDICATORS.items():
+        d = df[df["IndicatorType"] == it]
+        cols[col] = pd.Series(d["Hodnota"].astype(float).values,
+                              index=pd.to_datetime(d["CasM"] + "-01")).sort_index()
+    m = pd.DataFrame(cols).sort_index()
+
     # Aktuální tail z živého výběru (opendata CSV bývá o pár měsíců pozadu).
     try:
         j = requests.get(_CSU_CPI_VYBER, timeout=40,
                          headers={"Accept": "application/json"}).json()
-        cas = list(j["dimension"]["CasM"]["category"]["index"].items())
-        ipac = j["dimension"]["IndicatorType"]["category"]["index"]["6134IPAC"]
-        nC = len(cas)
-        val = j["value"]
-        for code, ci in cas:
-            k = ipac * nC + ci   # rozměr [Uz0(1), IndicatorType, CasM]
-            v = val.get(str(k)) if isinstance(val, dict) else (val[k] if k < len(val) else None)
-            if v is not None:
-                s.loc[pd.Timestamp(code + "-01")] = float(v) - 100.0
+        dim = j["dimension"]
+        cas = dim["CasM"]["category"]["index"]
+        iti = dim["IndicatorType"]["category"]["index"]
+        val, nC = j["value"], len(cas)
+        for it, col in _CSU_CPI_INDICATORS.items():
+            if it not in iti:
+                continue
+            for code, ci in cas.items():
+                k = iti[it] * nC + ci   # rozměr [Uz0(1), IndicatorType, CasM]
+                v = val.get(str(k)) if isinstance(val, dict) else (val[k] if k < len(val) else None)
+                if v is not None:
+                    m.loc[pd.Timestamp(code + "-01"), col] = float(v)
     except Exception as e:
         log.info("  (živý výběr CPI přeskočen: %s)", e)
-    return s.sort_index()
+
+    m = m.sort_index()
+    m["mom"] = m["mom"] - 100.0     # index -> procentní změna
+    m["yoy"] = m["yoy"] - 100.0
+    return m
+
+
+def fetch_csu_cpi() -> pd.Series:
+    """Měsíční meziroční míra inflace NÁRODNÍHO CPI (ČSÚ), v %.
+
+    Toto je index, který cíluje ČNB (2 %) a reportuje MF ČR — ne HICP
+    z Eurostatu. Tenká obálka nad fetch_csu_cpi_monthly().
+    """
+    s = fetch_csu_cpi_monthly()["yoy"].dropna()
+    s.name = "cpi_yoy"
+    return s
+
+
+# ─────────────────────────────────────────────
+# 3b. ČSÚ – týdenní ceny pohonných hmot (vstup měsíčního nowcastu inflace)
+# ─────────────────────────────────────────────
+
+_CSU_FUEL_CSV = "https://data.csu.gov.cz/opendata/sady/CENPHMT/distribuce/csv"
+
+
+def fetch_csu_fuel() -> pd.DataFrame:
+    """Měsíční ceny pohonných hmot: sloupce fuel (Kč/l) a weeks (počet týdnů).
+
+    ČSÚ šetří ceny PHM TÝDNĚ (sada CENPHMT), takže jsou známé zhruba o dva
+    měsíce dřív než index spotřebitelských cen. To z nich dělá hlavní včasný
+    vstup měsíčního nowcastu inflace. Cena = průměr Natural 95 a nafty; týden
+    se mapuje na měsíc podle svého čtvrtka (reprezentativní den, ať se týdny
+    na přelomu měsíce nedělí).
+
+    'weeks' říká, z kolika týdnů je měsíční průměr spočítaný. U rozběhnutého
+    měsíce jsou to jen 1-2 týdny a průměr je nereprezentativní, proto na tom
+    nowcast staví míru spolehlivosti.
+    """
+    from io import BytesIO
+    log.info("ČSÚ ← ceny pohonných hmot (týdenní šetření)")
+    r = requests.get(_CSU_FUEL_CSV, timeout=120)
+    r.raise_for_status()
+    df = pd.read_csv(BytesIO(r.content), low_memory=False)
+    d = df[(df["IndicatorType"] == "6621T")
+           & (df["CENPHM"].isin([722201, 722101]))].copy()   # Natural 95, nafta
+    dt = pd.to_datetime(d["CASTPHM"].astype(str) + "-4",
+                        format="%G-W%V-%u", errors="coerce")
+    d = d.assign(dt=dt).dropna(subset=["dt"])
+    piv = d.pivot_table(index="dt", columns="CENPHM", values="Hodnota", aggfunc="mean")
+    wk = piv.mean(axis=1)                       # týdenní průměr obou paliv
+    out = pd.DataFrame({"fuel": wk.resample("MS").mean(),
+                        "weeks": wk.resample("MS").count()})
+    return out[out["weeks"] > 0]
 
 
 # ─────────────────────────────────────────────

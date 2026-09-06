@@ -97,6 +97,20 @@ def build_payload(args) -> dict:
         except Exception as e:
             print(f"  (nowcast přeskočen: {e})")
 
+    # ── Nowcast měsíční inflace ────────────────────────────────────────────
+    # Odhad CPI za měsíc, který ČSÚ ještě nezveřejnil (ceny PHM jsou známé
+    # týdně, tedy s předstihem). Samostatný blok, do čtvrtletní prognózy
+    # nezasahuje. Výpadek export neshodí.
+    cpi_nowcast = None
+    if not args.no_nowcast:
+        try:
+            from nowcast_cpi import run_cpi_nowcast
+            cpi_nowcast = run_cpi_nowcast()
+            print(f"  nowcast CPI {cpi_nowcast['target_month']} = "
+                  f"{cpi_nowcast['yoy']} % r/r ({cpi_nowcast['mom']:+.2f} % m/m)")
+        except Exception as e:
+            print(f"  (nowcast CPI přeskočen: {e})")
+
     fin = build_financial_dataset(use_cache=True)
 
     ipath = os.path.join(BASE_DIR, "data", "raw", "fin_intervals.json")
@@ -422,6 +436,7 @@ def build_payload(args) -> dict:
         "headline": headline,
         "annual": annual,
         "nowcast": nowcast,
+        "cpi_nowcast": cpi_nowcast,
         "variables": variables,
         "decomposition": decomp,
         "scenarios": scenarios,
