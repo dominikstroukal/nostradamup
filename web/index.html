@@ -82,6 +82,10 @@ const mname = (s) => { if(!s) return ''; const [y,m]=s.split('-');
 const mgen = (s) => { if(!s) return ''; const m=Number(s.split('-')[1]);
   return MES_GEN[m-1]||''; };
 const tydny = (n) => n===1 ? '1 týden' : (n>=2&&n<=4 ? `${n} týdny` : `${n} týdnů`);
+const MES_ABBR = ['led','úno','bře','dub','kvě','čvn','čvc','srp','zář','říj','lis','pro'];
+// "2026-08" -> "srp 26" (do osy grafu; samotný název měsíce by se přes dva roky opakoval)
+const msh = (s) => { if(!s) return ''; const [y,m]=s.split('-');
+  return `${MES_ABBR[Number(m)-1]||m} ${y.slice(2)}`; };
 const BASIS = {model_full:'ceny PHM za celý měsíc',
                model_partial:'ceny PHM jen za část měsíce',
                seasonal:'jen sezónní norma, PHM zatím nejsou'};
@@ -350,27 +354,39 @@ function render(D){
       (${tydny(P.fuel_weeks)} šetření${P.fuel_complete?', úplný měsíc':', měsíc ještě běží → širší interval'}),
       což posouvá odhad o ${dev>=0?'+':''}${fmt(dev,2)} pp proti obvyklému průběhu ${mgen(P.target_month)}.</p>
       <div class="chart sm"><canvas id="cpiNcChart"></canvas></div>
+      <p class="hint" style="margin-top:8px">Body vpravo jsou nowcast. Čím menší bod, tím slabší
+      data za ním stojí; prázdný kroužek znamená, že za daný měsíc ještě nejsou ceny pohonných
+      hmot a zbývá jen sezónní norma.</p>
       <p class="hint" style="margin-top:18px">Backtest v současném cenovém režimu (${B.n} měsíců):
       chyba ${fmt(B.rmse,2)} pp vs. ${fmt(B.rmse_seasonal,2)} pp u pouhé sezónní normy
       (Theil U ${fmt(B.theil_u,2)}), směrová shoda ${B.directional!=null?Math.round(B.directional*100):'—'} %.
       Model tedy sezónní normu poráží, ale cenový šok typu 2022 z cen benzinu předpovědět nelze.</p></div>`);
     app.appendChild(card);
 
-    const H = P.history || [];
-    const labels = H.map(p=>mname(p.month).split(' ')[0]).concat([mname(P.target_month).split(' ')[0]]);
+    const H = P.history || [], NM = P.months || [{month:P.target_month, mom:P.mom, basis:'model_full'}];
+    // Bod je tím menší a světlejší, čím slabší data za ním stojí.
+    const RAD = {model_full:6, model_partial:5, seasonal:4};
+    const labels = H.map(p=>msh(p.month)).concat(NM.map(m=>msh(m.month)));
     new Chart(card.querySelector('#cpiNcChart'), {
       type:'line',
       data:{labels, datasets:[
-        {label:'Skutečnost (ČSÚ)', data:H.map(p=>p.actual).concat([null]),
+        {label:'Skutečnost (ČSÚ)', data:H.map(p=>p.actual).concat(NM.map(()=>null)),
          borderColor:F.navy, borderWidth:2.4, pointRadius:0, tension:.25},
-        {label:'Model / nowcast', data:H.map(p=>p.model).concat([P.mom]),
+        {label:'Model / nowcast', data:H.map(p=>p.model).concat(NM.map(m=>m.mom)),
          borderColor:F.blue, borderWidth:2.4, borderDash:[6,3],
-         pointRadius:H.map(()=>0).concat([5]),
-         pointBackgroundColor:F.blue, tension:.25},
+         pointRadius:H.map(()=>0).concat(NM.map(m=>RAD[m.basis]||5)),
+         pointBackgroundColor:H.map(()=>F.blue).concat(
+           NM.map(m=>m.basis==='seasonal'?'#fff':F.blue)),
+         pointBorderColor:F.blue, pointBorderWidth:2, tension:.25},
       ]},
       options:{responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
         plugins:{legend:{labels:{boxWidth:12,font:{size:11}}},
-          tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.parsed.y,2)+' %'}}},
+          tooltip:{callbacks:{
+            title:items=>{const i=items[0].dataIndex;
+              const all=H.map(p=>p.month).concat(NM.map(m=>m.month));
+              const b=i>=H.length?NM[i-H.length].basis:null;
+              return mname(all[i])+(b?` · nowcast (${BASIS[b]||b})`:'');},
+            label:c=>c.parsed.y===null?null:c.dataset.label+': '+fmt(c.parsed.y,2)+' %'}}},
         scales:{y:{grid:{color:'#E8ECF5'},title:{display:true,text:'CPI meziměsíčně (%)'},ticks:{font:{size:11}}},
                 x:{grid:{display:false},ticks:{font:{size:10}}}}}
     });
