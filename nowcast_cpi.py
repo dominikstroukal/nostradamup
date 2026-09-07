@@ -153,8 +153,22 @@ def backtest(d: pd.DataFrame, start: str = "2018-01", skip_crisis: bool = False)
 
 # ── Výstup pro web ────────────────────────────────────────────────────────────
 
-def run_cpi_nowcast(hist_m: int = 12, d: pd.DataFrame | None = None) -> dict:
-    """Spočítá nowcast inflace a vrátí JSON-safe dict pro web (export_web.py).
+def run_cpi_nowcast(hist_m: int = 12, horizon: int = 3,
+                    d: pd.DataFrame | None = None) -> dict:
+    """Spočítá nowcast inflace na 'horizon' měsíců a vrátí JSON-safe dict.
+
+    Proč víc než jeden měsíc: náš datový kanál (živý výběr ČSÚ) zaostává za
+    tiskovou zprávou o pár dní, takže první nezveřejněný měsíc v datech už
+    bývá veřejně známý. Aby byl nowcast k něčemu, musí dosáhnout i na měsíc,
+    který opravdu nikdo nezná.
+
+    Kvalita s horizontem klesá a je to přiznané v 'basis' u každého měsíce:
+      model_full    - ceny PHM za celý měsíc (nejlepší odhad),
+      model_partial - měsíc ještě běží, PHM jen z části týdnů,
+      seasonal      - PHM zatím žádné, zbývá pouze sezónní norma.
+
+    Meziroční hodnoty se řetězí přes bazický index, takže nejistota se
+    s každým dalším měsícem skládá (sqrt ze součtu rozptylů).
 
     'd' lze předat, když už je tabulka sestavená (ušetří stahování ČSÚ).
     """
@@ -162,21 +176,64 @@ def run_cpi_nowcast(hist_m: int = 12, d: pd.DataFrame | None = None) -> dict:
         d = build_cpi_nowcast_data()
 
     last = d["mom"].last_valid_index()               # poslední zveřejněný měsíc
-    target = last + pd.DateOffset(months=1)          # první nezveřejněný
-    if target not in d.index:
-        raise ValueError(f"pro {target.date()} nejsou data o PHM")
-
-    mom, seas, contrib = fit_predict(d[d.index < target], d.loc[target])
-
-    # Meziroční z bazického indexu (viz docstring).
-    base = d["idx"].loc[target - pd.DateOffset(months=12)]
-    yoy = (d["idx"].loc[last] * (1 + mom / 100) / base - 1) * 100
-
     bt = backtest(d, "2024-01")
-    weeks = int(d.loc[target, "weeks"]) if pd.notna(d.loc[target, "weeks"]) else 0
-    # Nekompletní měsíc PHM = širší interval (průměr z 1-2 týdnů je nereprezentativní).
-    rmse = bt.get("rmse", 0.3) or 0.3
-    band = rmse * (1.0 if weeks >= FULL_WEEKS else 1.6)
+    rmse = bt.get("rmse") or 0.3
+    rmse_seas = bt.get("rmse_seasonal") or 0.35
+    train = d[d.index <= last]
+    seas_map = seasonal_norm(train)
+
+    months, idx_prev, var = [], float(d["idx"].loc[last]), 0.0
+    for h in range(1, horizon + 1):
+        target = last + pd.DateOffset(months=h)
+        row = d.loc[target] if target in d.index else None
+        weeks = int(row["weeks"]) if row is not None and pd.notna(row["weeks"]) else 0
+        contrib = {}
+
+        try:
+            if row is None or pd.isna(row.get("fuel_mom")):
+                raise ValueError("bez dat o PHM")
+            mom, seas, contrib = fit_predict(train, row)
+            basis = "model_full" if weeks >= FULL_WEEKS else "model_partial"
+            # Nekompletní měsíc: průměr z 1-2 týdnů je nereprezentativní.
+            sd = rmse * (1.0 if weeks >= FULL_WEEKS
+                         else 1.0 + 0.6 * (FULL_WEEKS - weeks) / FULL_WEEKS)
+        except (ValueError, np.linalg.LinAlgError):
+            # Bez prediktoru zbývá jen sezónní norma - a její vlastní chyba.
+            seas = float(seas_map.get(target.month, np.nan))
+            mom, basis, sd = seas, "seasonal", rmse_seas
+
+        if not np.isfinite(mom):
+            break
+
+        idx_new = idx_prev * (1 + mom / 100)
+        base = d["idx"].get(target - pd.DateOffset(months=12))
+        if base is None or not np.isfinite(base):
+            break
+        yoy = (idx_new / base - 1) * 100
+        var += sd ** 2                    # chyby se v řetězu skládají
+        band = float(np.sqrt(var))
+
+        months.append({
+            "month": target.strftime("%Y-%m"),
+            "mom": round(float(mom), 2),
+            "yoy": round(float(yoy), 1),
+            "yoy_lower": round(float(yoy - band), 1),
+            "yoy_upper": round(float(yoy + band), 1),
+            "seasonal_norm": round(float(seas), 2) if np.isfinite(seas) else None,
+            "basis": basis,
+            "fuel_weeks": weeks,
+            "fuel_complete": bool(weeks >= FULL_WEEKS),
+            "fuel_mom": (round(float(row["fuel_mom"]), 2)
+                         if row is not None and pd.notna(row.get("fuel_mom")) else None),
+            "contributions": [
+                {"indicator": k, "label": LABELS.get(k, k), "impact": round(float(v), 3)}
+                for k, v in sorted(contrib.items(), key=lambda kv: -abs(kv[1]))
+            ],
+        })
+        idx_prev = idx_new
+
+    if not months:
+        raise ValueError("nowcast CPI: nepodařilo se spočítat žádný měsíc")
 
     comp = []
     for t in d.index[d.index <= last][-hist_m:]:
@@ -190,26 +247,26 @@ def run_cpi_nowcast(hist_m: int = 12, d: pd.DataFrame | None = None) -> dict:
                      "actual": round(float(d.loc[t, "mom"]), 2),
                      "model": round(float(p), 2)})
 
+    first = months[0]
     return {
-        "target_month": target.strftime("%Y-%m"),
-        "mom": round(float(mom), 2),
-        "yoy": round(float(yoy), 1),
-        "yoy_lower": round(float(yoy - band), 1),
-        "yoy_upper": round(float(yoy + band), 1),
-        "seasonal_norm": round(float(seas), 2),
+        # Nejbližší měsíc zůstává i v kořeni (zpětná kompatibilita webu).
+        "target_month": first["month"],
+        "mom": first["mom"],
+        "yoy": first["yoy"],
+        "yoy_lower": first["yoy_lower"],
+        "yoy_upper": first["yoy_upper"],
+        "seasonal_norm": first["seasonal_norm"],
+        "fuel_weeks": first["fuel_weeks"],
+        "fuel_complete": first["fuel_complete"],
+        "fuel_mom": first["fuel_mom"],
+        "contributions": first["contributions"],
         "unit": "% m/m",
+        "months": months,
         "last_actual_month": last.strftime("%Y-%m"),
         "last_actual_mom": round(float(d.loc[last, "mom"]), 2),
         "last_actual_yoy": round(float(d.loc[last, "yoy"]), 1),
-        "fuel_weeks": weeks,
-        "fuel_complete": bool(weeks >= FULL_WEEKS),
-        "fuel_mom": round(float(d.loc[target, "fuel_mom"]), 2),
         "backtest": bt,
         "history": comp,
-        "contributions": [
-            {"indicator": k, "label": LABELS.get(k, k), "impact": round(float(v), 3)}
-            for k, v in sorted(contrib.items(), key=lambda kv: -abs(kv[1]))
-        ],
     }
 
 
@@ -222,14 +279,20 @@ def main():
     print("=" * 64)
     print(f"  poslední zveřejněný měsíc : {r['last_actual_month']}  "
           f"({r['last_actual_mom']:+.2f} % m/m, {r['last_actual_yoy']:.1f} % r/r)")
-    print(f"  NOWCAST na                : {r['target_month']}")
-    print(f"    meziměsíčně             : {r['mom']:+.2f} %  "
-          f"(sezónní norma {r['seasonal_norm']:+.2f} %)")
-    print(f"    MEZIROČNĚ               : {r['yoy']:.1f} %  "
-          f"({r['yoy_lower']:.1f} až {r['yoy_upper']:.1f})")
-    print(f"  ceny PHM za cílový měsíc  : {r['fuel_mom']:+.2f} % m/m "
-          f"({r['fuel_weeks']} týdnů{'' if r['fuel_complete'] else ', NEúplný měsíc'})")
-    print("\n  příspěvky k odchylce od sezónní normy:")
+
+    zaklad = {"model_full": "PHM celý měsíc",
+              "model_partial": "PHM jen část měsíce",
+              "seasonal": "jen sezónní norma"}
+    print("\n  měsíc     m/m      r/r  (interval)        základ")
+    for m in r["months"]:
+        phm = "PHM –" if m["fuel_mom"] is None else f"PHM {m['fuel_mom']:+.1f} %"
+        if m["fuel_weeks"] and not m["fuel_complete"]:
+            phm += f" [{m['fuel_weeks']} tý.]"
+        zakl = zaklad.get(m["basis"], m["basis"])
+        print(f"  {m['month']}  {m['mom']:+.2f} %  {m['yoy']:5.1f} %  "
+              f"({m['yoy_lower']:.1f}–{m['yoy_upper']:.1f})   {zakl:22s} {phm}")
+
+    print("\n  příspěvky k odchylce od sezónní normy (nejbližší měsíc):")
     for c in r["contributions"]:
         print(f"    {c['label']:34s} {c['impact']:+.3f} pp")
 

@@ -82,6 +82,9 @@ const mname = (s) => { if(!s) return ''; const [y,m]=s.split('-');
 const mgen = (s) => { if(!s) return ''; const m=Number(s.split('-')[1]);
   return MES_GEN[m-1]||''; };
 const tydny = (n) => n===1 ? '1 týden' : (n>=2&&n<=4 ? `${n} týdny` : `${n} týdnů`);
+const BASIS = {model_full:'ceny PHM za celý měsíc',
+               model_partial:'ceny PHM jen za část měsíce',
+               seasonal:'jen sezónní norma, PHM zatím nejsou'};
 
 fetch('data/latest.json?_=' + Date.now())
   .then(r => { if(!r.ok) throw new Error('data/latest.json nenalezen'); return r.json(); })
@@ -311,8 +314,10 @@ function render(D){
     const P = D.cpi_nowcast, B = P.backtest || {};
     const dev = P.mom - P.seasonal_norm;
     const card = el(`<div class="card"><h2>Nowcast inflace — příští zveřejnění</h2>
-      <p class="hint">Odhad indexu spotřebitelských cen za měsíc, který ČSÚ ještě nezveřejnil.
+      <p class="hint">Odhad indexu spotřebitelských cen za měsíce, které ČSÚ ještě nezveřejnil.
       Staví na tom, že ceny pohonných hmot se šetří <b>týdně</b>, tedy s předstihem před CPI.
+      Jde o několik měsíců dopředu záměrně: naše datové napojení na ČSÚ zaostává za tiskovou
+      zprávou o pár dní, takže nejbližší měsíc už bývá veřejně známý.
       Model neodhaduje meziroční inflaci přímo (ta je z velké části daná loňskou základnou),
       ale <b>meziměsíční</b> změnu, a z ní se meziroční dopočítá přes bazický index.</p>
       <div class="hero" style="margin-bottom:18px">
@@ -326,6 +331,20 @@ function render(D){
           <div class="val">${fmt(P.last_actual_yoy)} %</div>
           <div class="note">${mname(P.last_actual_month)} (ČSÚ)</div></div>
       </div>
+      ${(P.months&&P.months.length>1) ? `<table style="margin-bottom:6px"><thead><tr>
+        <th>Měsíc</th><th style="text-align:right">Meziměsíčně</th>
+        <th style="text-align:right">Meziročně</th><th>Z čeho odhad stojí</th></tr></thead><tbody>
+        ${P.months.map(m=>`<tr>
+          <td>${mname(m.month)}</td>
+          <td style="text-align:right">${m.mom>=0?'+':''}${fmt(m.mom,2)} %</td>
+          <td style="text-align:right"><b>${fmt(m.yoy)} %</b>
+            <span style="color:var(--muted);font-weight:400">(${fmt(m.yoy_lower)}–${fmt(m.yoy_upper)})</span></td>
+          <td style="color:var(--muted)">${BASIS[m.basis]||m.basis}${
+            m.fuel_weeks&&!m.fuel_complete?` (${tydny(m.fuel_weeks)})`:''}</td></tr>`).join('')}
+      </tbody></table>
+      <p class="hint">Čím dál od posledního zveřejnění, tím širší interval: meziroční hodnoty se
+      řetězí přes bazický index, takže se nejistota jednotlivých měsíců skládá. Poslední měsíc
+      už stojí jen na sezónní normě, protože ceny pohonných hmot za něj zatím nejsou.</p>` : ''}
       <p class="hint"><b>Proč ${dev>=0?'nad':'pod'} sezónní normou:</b> ceny pohonných hmot
       ${P.fuel_mom>=0?'vzrostly':'klesly'} o ${fmt(Math.abs(P.fuel_mom),1)} % m/m
       (${tydny(P.fuel_weeks)} šetření${P.fuel_complete?', úplný měsíc':', měsíc ještě běží → širší interval'}),
