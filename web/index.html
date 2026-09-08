@@ -8,14 +8,43 @@
 <style>
 :root{--navy:#00205B;--blue:#003DA5;--bg:#F2F4F7;--card:#fff;--grid:#D8E0F0;--muted:#5A6478;--warn:#C0392B;--ok:#2E7D32}
 *{box-sizing:border-box}
+html{scroll-behavior:smooth}
 body{margin:0;background:var(--bg);color:var(--navy);
  font-family:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.6}
-.wrap{max-width:1080px;margin:0 auto;padding:20px 16px 60px}
-header{border-bottom:3px solid var(--navy);padding-bottom:14px;margin-bottom:26px}
+.wrap{max-width:1080px;margin:0 auto;padding:0 16px}
+.wrap.top{padding-top:20px}
+.wrap.body{padding-bottom:60px}
+header{border-bottom:3px solid var(--navy);padding-bottom:14px}
 h1{margin:0;font-size:clamp(22px,4vw,32px);letter-spacing:-.02em}
 .tagline{color:var(--blue);font-size:14px;font-weight:600;margin-top:6px;letter-spacing:.01em}
 .sub{color:var(--muted);font-size:13px;margin-top:4px}
-.hero{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:26px}
+
+/* ── Rychlá navigace: sticky, přes celou šířku ─────────────────────────── */
+nav.toc{position:sticky;top:0;z-index:30;background:rgba(242,244,247,.93);
+ backdrop-filter:saturate(180%) blur(10px);border-bottom:1px solid var(--grid);margin-bottom:26px}
+nav.toc ul{max-width:1080px;margin:0 auto;padding:9px 16px;display:flex;gap:5px;
+ list-style:none;overflow-x:auto;scrollbar-width:none}
+nav.toc ul::-webkit-scrollbar{display:none}
+nav.toc a{display:block;padding:7px 15px;border-radius:17px;text-decoration:none;
+ font-size:13.5px;font-weight:500;color:var(--muted);white-space:nowrap;transition:.15s}
+nav.toc a:hover{background:#E3E9F3;color:var(--navy)}
+nav.toc a.on{background:var(--blue);color:#fff;font-weight:600}
+/* Na úzkém displeji lišta přetéká: náznak, že pokračuje za okraj. */
+@media(max-width:700px){
+  nav.toc{position:sticky}
+  nav.toc::after{content:'';position:absolute;right:0;top:0;bottom:1px;width:26px;
+   pointer-events:none;background:linear-gradient(90deg,rgba(242,244,247,0),rgba(242,244,247,.95))}
+}
+
+/* ── Sekce ────────────────────────────────────────────────────────────── */
+section{scroll-margin-top:62px;margin-bottom:34px}
+.sec-head{margin-bottom:14px}
+.sec-head h2{font-size:clamp(19px,3vw,23px);margin:0;letter-spacing:-.015em;
+ display:flex;align-items:center;gap:10px}
+.sec-head h2::before{content:'';width:5px;height:22px;background:var(--blue);border-radius:3px;flex:none}
+.sec-desc{color:var(--muted);font-size:13.5px;margin:5px 0 0}
+
+.hero{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}
 .big{background:var(--card);border-radius:10px;padding:20px;border-left:5px solid var(--blue)}
 .big .lbl{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
 .big .val{font-size:clamp(30px,6vw,42px);font-weight:700;line-height:1.1;margin:6px 0 2px}
@@ -23,13 +52,21 @@ h1{margin:0;font-size:clamp(22px,4vw,32px);letter-spacing:-.02em}
 .badge{display:inline-block;padding:2px 9px;border-radius:11px;font-size:11px;font-weight:600;margin-top:6px}
 .badge.warn{background:#FBEAE8;color:var(--warn)}
 .badge.ok{background:#E8F3E9;color:var(--ok)}
-.card{background:var(--card);border-radius:10px;padding:20px;margin-bottom:18px}
-h2{font-size:17px;margin:0 0 4px;letter-spacing:-.01em}
+.card{background:var(--card);border-radius:10px;padding:20px;margin-top:14px}
+.card h3{font-size:17px;margin:0 0 4px;letter-spacing:-.01em}
 .hint{font-size:12.5px;color:var(--muted);margin:0 0 14px}
-.tabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}
-.tab{padding:6px 13px;border:1px solid var(--grid);background:var(--card);border-radius:16px;
- cursor:pointer;font-size:13px;color:var(--muted);font-family:inherit}
+
+/* ── Záložky prognózy, seskupené podle kategorie ───────────────────────── */
+.tabwrap{margin-bottom:16px}
+.tabgroup{margin-bottom:10px}
+.tg-lbl{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;
+ color:var(--muted);margin-bottom:5px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tab{padding:5px 13px;border:1px solid var(--grid);background:var(--card);border-radius:16px;
+ cursor:pointer;font-size:13px;color:var(--muted);font-family:inherit;transition:.15s}
+.tab:hover{border-color:var(--blue);color:var(--navy)}
 .tab.on{background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600}
+
 .chart{position:relative;height:330px}
 .chart.sm{height:260px}
 table{width:100%;border-collapse:collapse;font-size:13.5px}
@@ -50,12 +87,17 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:34px;
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="wrap top">
   <header>
     <h1>NOSTRADAMUP</h1>
     <div class="tagline">AI-powered predikční model české ekonomiky</div>
     <div class="sub" id="sub">Načítám…</div>
   </header>
+</div>
+
+<nav class="toc" id="nav" hidden><ul id="toc"></ul></nav>
+
+<div class="wrap body">
   <div id="app"></div>
   <footer>
     <div>Metropolitní univerzita Praha · semi-strukturální novokeynesiánský model</div>
@@ -90,6 +132,26 @@ const BASIS = {model_full:'ceny PHM za celý měsíc',
                model_partial:'ceny PHM jen za část měsíce',
                seasonal:'jen sezónní norma, PHM zatím nejsou'};
 
+// Skupiny veličin pro záložky prognózy (pořadí + čitelné názvy).
+const GROUP_ORDER = ['inflace','aktivita','sazby','kurzy'];
+const GROUP_LABEL = {inflace:'Inflace', aktivita:'Aktivita', sazby:'Sazby',
+                     kurzy:'Kurzy', 'ostatní':'Ostatní'};
+
+// Sekce stránky. Karty se do nich vkládají přes add(); prázdné sekce
+// se i s položkou v navigaci na konci skryjí.
+const SECTIONS = [
+  {id:'prehled',  nav:'Přehled',    title:'Přehled',
+   desc:'Hlavní čísla této prognózy na jednom místě.'},
+  {id:'nyni',     nav:'Právě teď',  title:'Právě teď',
+   desc:'Odhady za období, která statistický úřad ještě nezveřejnil. Doplňují prognózu o to, kde ekonomika je v tuto chvíli.'},
+  {id:'prognoza', nav:'Prognóza',   title:'Prognóza',
+   desc:'Kam model míří v příštích čtvrtletích a letech, včetně srovnání s ostatními prognostiky.'},
+  {id:'rozbor',   nav:'Rozbor',     title:'Rozbor',
+   desc:'Proč prognóza vychází tak, jak vychází: z čeho se skládá a jak by se změnila za jiných předpokladů.'},
+  {id:'model',    nav:'O modelu',   title:'O modelu',
+   desc:'Nastavení, se kterým tato prognóza běžela.'},
+];
+
 fetch('data/latest.json?_=' + Date.now())
   .then(r => { if(!r.ok) throw new Error('data/latest.json nenalezen'); return r.json(); })
   .then(render)
@@ -108,13 +170,21 @@ function render(D){
     `Vygenerováno ${m.generated_ts} · horizont ${m.horizon_quarters} čtvrtletí`;
 
   const app = document.getElementById('app');
+  const secEl = {};
+  SECTIONS.forEach(s => {
+    const sec = el(`<section id="${s.id}"><div class="sec-head">
+      <h2>${s.title}</h2><p class="sec-desc">${s.desc}</p></div></section>`);
+    app.appendChild(sec);
+    secEl[s.id] = sec;
+  });
+  const add = (id, node) => secEl[id].appendChild(node);
 
-  // ── Headline ──────────────────────────────────────────────────────────
+  // ── Přehled: hlavní čísla ─────────────────────────────────────────────
   const anch = h.ukotvenost || '';
   const badge = anch === 'ukotvená'
     ? `<span class="badge ok">očekávání ukotvená</span>`
     : `<span class="badge warn">${anch} o ${fmt(Math.abs(h.ukotvenost_odchylka))} pp</span>`;
-  app.appendChild(el(`<div class="hero">
+  add('prehled', el(`<div class="hero">
     <div class="big"><div class="lbl">Inflace za 1 rok</div>
       <div class="val">${fmt(h.inflace_1y)} %</div>
       <div class="note">cíl ČNB ${fmt(h.cil)} %</div></div>
@@ -134,135 +204,18 @@ function render(D){
       <div class="note">2T repo ČNB</div></div>
   </div>`));
 
-  // ── Roční prognóza (kalendářní roky, srovnatelné s ČBA/ČNB/MF) ────────
-  if (D.annual && D.annual.rows && D.annual.rows.length) {
-    const A = D.annual, fc = new Set(A.forecast_years || []);
-    const head = A.years.map(y =>
-      `<th style="text-align:right">${y}${fc.has(y)?'':' <span style="font-weight:400;color:var(--muted)">skut.</span>'}</th>`).join('');
-    const body = A.rows.map(r =>
-      `<tr><td style="font-family:inherit;color:var(--navy);white-space:normal">${r.label}</td>` +
-      A.years.map(y => {
-        const ours = r.values[y]!==undefined ? fmt(r.values[y], r.dec)+(r.unit==='%'?' %':'') : '—';
-        const mfv = (r.mf && r.mf[y]!==undefined)
-          ? `<br><span style="font-size:10px;color:var(--muted);font-weight:400">MF ${fmt(r.mf[y], r.dec)}</span>` : '';
-        return `<td class="num">${ours}${mfv}</td>`;
-      }).join('') + `</tr>`).join('');
-    const src = (A.external && A.external.mf)
-      ? `<p class="hint" style="margin-top:10px">Modře <b>NOSTRADAMUP</b>, šedě <b>${A.external.mf.label}</b>${A.external.mf.date?` (${A.external.mf.date})`:''} — automaticky stažená.
-         ČNB a ČBA publikují prognózu jen v PDF, nejsou proto zahrnuty.</p>` : '';
-    app.appendChild(el(`<div class="card"><h2>Roční prognóza</h2>
-      <p class="hint">Kalendářní roky pro srovnání s ČBA, ČNB, MF ČR a bankami.
-      Růst a inflace = průměr roku, sazby = konec roku.
-      ${(A.forecast_years||[]).length?`Prognóza: ${A.forecast_years.join(', ')} (dřívější roky skutečnost).`:''}</p>
-      <div style="overflow-x:auto"><table><thead><tr><th>Veličina</th>${head}</tr></thead>
-      <tbody>${body}</tbody></table></div>${src}</div>`));
+  // Komentář patří k přehledu: slovní shrnutí těch samých čísel.
+  if (D.commentary) {
+    add('prehled', el(`<div class="card commentary"><h3>Komentář</h3>` +
+      D.commentary.split(/\n\s*\n/).map(p=>`<p>${p.trim()}</p>`).join('') +
+      `<p class="hint" style="margin-top:12px;font-style:italic;border-top:1px solid var(--grid);padding-top:10px">` +
+      `Komentář je automaticky generovaný umělou inteligencí (Claude) z číselných výstupů modelu.</p></div>`));
   }
 
-  // ── Prognózy: záložky se generují Z DAT (nic natvrdo) ─────────────────
-  const vars = D.variables || {};
-  const keys = Object.keys(vars).sort((a,b) =>
-    (vars[b].headline?1:0)-(vars[a].headline?1:0) ||
-    vars[a].group.localeCompare(vars[b].group));
-  if (keys.length) {
-    const card = el(`<div class="card"><h2>Prognóza</h2>
-      <p class="hint">Plná čára: skutečnost. Přerušovaná: medián prognózy. Pásma: 50% a 90% interval.</p>
-      <div class="tabs" id="tabs"></div><div class="chart"><canvas id="mainChart"></canvas></div></div>`);
-    app.appendChild(card);
-    let chart = null;
-    const draw = (k) => {
-      const v = vars[k];
-      const hist = v.history, fc = v.forecast;
-      const labels = hist.map(p=>qLabel(p.date)).concat(fc.map(p=>qLabel(p.date)));
-      const pad = hist.map(()=>null);
-      const link = hist.length ? hist[hist.length-1].value : null;
-      const ds = [
-        {label:'Skutečnost', data:hist.map(p=>p.value).concat(fc.map(()=>null)),
-         borderColor:F.navy, borderWidth:2.4, pointRadius:0, tension:.25},
-        {label:'Prognóza', data:pad.slice(0,-1).concat([link], fc.map(p=>p.median)),
-         borderColor:F.blue, borderWidth:2.4, borderDash:[6,3], pointRadius:0, tension:.25},
-        {label:'90 %', data:pad.slice(0,-1).concat([link], fc.map(p=>p.upper_90)),
-         borderColor:'transparent', backgroundColor:F.band90, fill:'+1', pointRadius:0},
-        {label:'_l90', data:pad.slice(0,-1).concat([link], fc.map(p=>p.lower_90)),
-         borderColor:'transparent', pointRadius:0},
-        {label:'50 %', data:pad.slice(0,-1).concat([link], fc.map(p=>p.upper_50)),
-         borderColor:'transparent', backgroundColor:F.band50, fill:'+1', pointRadius:0},
-        {label:'_l50', data:pad.slice(0,-1).concat([link], fc.map(p=>p.lower_50)),
-         borderColor:'transparent', pointRadius:0},
-      ];
-      if (chart) chart.destroy();
-      chart = new Chart(document.getElementById('mainChart'), {
-        type:'line', data:{labels, datasets:ds},
-        options:{responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
-          plugins:{legend:{labels:{filter:i=>!i.text.startsWith('_'), boxWidth:12, font:{size:11}}},
-            tooltip:{filter:i=>!i.dataset.label.startsWith('_'),
-              callbacks:{label:c=>c.dataset.label+': '+fmt(c.parsed.y,2)+' '+v.unit}}},
-          scales:{y:{grid:{color:'#E8ECF5'},ticks:{font:{size:11}},title:{display:true,text:v.unit}},
-                  x:{grid:{display:false},ticks:{maxTicksLimit:10,font:{size:10}}}}}
-      });
-    };
-    const tabs = card.querySelector('#tabs');
-    keys.forEach((k,i) => {
-      const b = el(`<button class="tab${i===0?' on':''}">${vars[k].label}</button>`);
-      b.onclick = () => { tabs.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
-                          b.classList.add('on'); draw(k); };
-      tabs.appendChild(b);
-    });
-    draw(keys[0]);
-  }
-
-  // ── Dekompozice ───────────────────────────────────────────────────────
-  if (D.decomposition) {
-    const ch = D.decomposition.channels, names = Object.keys(ch);
-    const hz = Object.keys(ch[names[0]]).sort((a,b)=>a-b);
-    app.appendChild(el(`<div class="card"><h2>Z čeho se skládá inflační prognóza</h2>
-      <p class="hint">Příspěvek kanálu = plný model minus model s vypnutým kanálem (identické šoky).
-      Zbytek do celku tvoří vlastní dynamika inflace.</p>
-      <div class="chart sm"><canvas id="decompChart"></canvas></div></div>`));
-    new Chart(document.getElementById('decompChart'), {
-      type:'bar',
-      data:{labels:names, datasets:hz.map((q,i)=>({
-        label:`za ${q} čtvrtletí`, data:names.map(n=>ch[n][q]),
-        backgroundColor:i===0?F.blue:'#7A9BD4'}))},
-      options:{indexAxis:'y', responsive:true, maintainAspectRatio:false,
-        plugins:{legend:{labels:{boxWidth:12,font:{size:11}}},
-          tooltip:{callbacks:{label:c=>c.dataset.label+': '+(c.parsed.x>0?'+':'')+fmt(c.parsed.x,2)+' pp'}}},
-        scales:{x:{grid:{color:'#E8ECF5'},title:{display:true,text:'procentní body'},ticks:{font:{size:11}}},
-                y:{grid:{display:false},ticks:{font:{size:11}}}}}
-    });
-  }
-
-  // ── Scénáře ───────────────────────────────────────────────────────────
-  if (D.scenarios && D.scenarios.length) {
-    const S = D.scenarios;
-    const card = el(`<div class="card"><h2>Scénáře</h2>
-      <p class="hint">Liší se kredibilitou ČNB (ukotvení očekávání) a domácími nákladovými tlaky.
-      Sazby v každém scénáři reagují Taylorovým pravidlem.</p>
-      <div class="chart sm"><canvas id="scenChart"></canvas></div>
-      <div style="margin-top:14px" id="scenList"></div></div>`);
-    app.appendChild(card);
-    const labels = S[0].hicp.map(p=>qLabel(p.date));
-    new Chart(document.getElementById('scenChart'), {
-      type:'line',
-      data:{labels, datasets:S.map(s=>({label:s.name, data:s.hicp.map(p=>p.median),
-        borderColor:s.color, borderWidth:2.4, borderDash:[6,3], pointRadius:2.5, tension:.25}))},
-      options:{responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
-        plugins:{legend:{labels:{boxWidth:12,font:{size:11}}},
-          tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.parsed.y,2)+' %'}}},
-        scales:{y:{grid:{color:'#E8ECF5'},title:{display:true,text:'inflace HICP (%)'},ticks:{font:{size:11}}},
-                x:{grid:{display:false},ticks:{font:{size:10}}}}}
-    });
-    const list = card.querySelector('#scenList');
-    S.forEach(s => list.appendChild(el(
-      `<div class="scen" style="border-left:4px solid ${s.color}">
-         <b>${s.name}</b> <span style="color:var(--muted);font-size:12px">
-         (λ=${s.anchoring}, tlak ${s.housing_pressure} pp)</span>
-         <p>${s.popis}</p></div>`)));
-  }
-
-  // ── Nowcast HDP (běžící odhad probíhajícího čtvrtletí) ────────────────
+  // ── Právě teď: nowcast HDP ────────────────────────────────────────────
   if (D.nowcast) {
     const N = D.nowcast, lr = N.last_release || {};
-    const card = el(`<div class="card"><h2>Nowcast HDP — běžící odhad</h2>
+    const card = el(`<div class="card"><h3>Nowcast HDP — běžící odhad</h3>
       <p class="hint">Odhad růstu HDP za právě probíhající čtvrtletí z měsíčních indikátorů
       (mixed-frequency faktorový model). Doplňuje prognózu: kde ekonomika je teď, než ČSÚ zveřejní HDP.</p>
       <div class="hero" style="margin-bottom:18px">
@@ -277,11 +230,10 @@ function render(D){
         (Δ ${lr.delta>=0?'+':''}${fmt(lr.delta,2)} pp) při posledním batchi dat.
         Příspěvek = překvapení × váha (Kalmanův zisk).</p>
       <div class="chart sm"><canvas id="ncNews"></canvas></div></div>`);
-    app.appendChild(card);
+    add('nyni', card);
 
     const H = N.history;
-    const fut = [N.current_quarter];   // nowcast = jen probíhající Q
-    const labels = H.map(p=>p.q).concat(fut);
+    const labels = H.map(p=>p.q).concat([N.current_quarter]);
     new Chart(card.querySelector('#ncChart'), {
       type:'line',
       data:{labels, datasets:[
@@ -313,11 +265,11 @@ function render(D){
     });
   }
 
-  // ── Nowcast měsíční inflace (měsíc, který ČSÚ ještě nezveřejnil) ──────
+  // ── Právě teď: nowcast měsíční inflace ────────────────────────────────
   if (D.cpi_nowcast) {
     const P = D.cpi_nowcast, B = P.backtest || {};
     const dev = P.mom - P.seasonal_norm;
-    const card = el(`<div class="card"><h2>Nowcast inflace — příští zveřejnění</h2>
+    const card = el(`<div class="card"><h3>Nowcast inflace — příští zveřejnění</h3>
       <p class="hint">Odhad indexu spotřebitelských cen za měsíce, které ČSÚ ještě nezveřejnil.
       Staví na tom, že ceny pohonných hmot se šetří <b>týdně</b>, tedy s předstihem před CPI.
       Jde o několik měsíců dopředu záměrně: naše datové napojení na ČSÚ zaostává za tiskovou
@@ -361,7 +313,7 @@ function render(D){
       chyba ${fmt(B.rmse,2)} pp vs. ${fmt(B.rmse_seasonal,2)} pp u pouhé sezónní normy
       (Theil U ${fmt(B.theil_u,2)}), směrová shoda ${B.directional!=null?Math.round(B.directional*100):'—'} %.
       Model tedy sezónní normu poráží, ale cenový šok typu 2022 z cen benzinu předpovědět nelze.</p></div>`);
-    app.appendChild(card);
+    add('nyni', card);
 
     const H = P.history || [], NM = P.months || [{month:P.target_month, mom:P.mom, basis:'model_full'}];
     // Bod je tím menší a světlejší, čím slabší data za ním stojí.
@@ -392,15 +344,99 @@ function render(D){
     });
   }
 
-  // ── Komentář ──────────────────────────────────────────────────────────
-  if (D.commentary) {
-    app.appendChild(el(`<div class="card commentary"><h2>Komentář</h2>` +
-      D.commentary.split(/\n\s*\n/).map(p=>`<p>${p.trim()}</p>`).join('') +
-      `<p class="hint" style="margin-top:12px;font-style:italic;border-top:1px solid var(--grid);padding-top:10px">` +
-      `Komentář je automaticky generovaný umělou inteligencí (Claude) z číselných výstupů modelu.</p></div>`));
+  // ── Prognóza: roční tabulka (srovnatelná s ČBA/ČNB/MF) ────────────────
+  if (D.annual && D.annual.rows && D.annual.rows.length) {
+    const A = D.annual, fc = new Set(A.forecast_years || []);
+    const head = A.years.map(y =>
+      `<th style="text-align:right">${y}${fc.has(y)?'':' <span style="font-weight:400;color:var(--muted)">skut.</span>'}</th>`).join('');
+    const body = A.rows.map(r =>
+      `<tr><td style="font-family:inherit;color:var(--navy);white-space:normal">${r.label}</td>` +
+      A.years.map(y => {
+        const ours = r.values[y]!==undefined ? fmt(r.values[y], r.dec)+(r.unit==='%'?' %':'') : '—';
+        const mfv = (r.mf && r.mf[y]!==undefined)
+          ? `<br><span style="font-size:10px;color:var(--muted);font-weight:400">MF ${fmt(r.mf[y], r.dec)}</span>` : '';
+        return `<td class="num">${ours}${mfv}</td>`;
+      }).join('') + `</tr>`).join('');
+    const src = (A.external && A.external.mf)
+      ? `<p class="hint" style="margin-top:10px">Modře <b>NOSTRADAMUP</b>, šedě <b>${A.external.mf.label}</b>${A.external.mf.date?` (${A.external.mf.date})`:''} — automaticky stažená.
+         ČNB a ČBA publikují prognózu jen v PDF, nejsou proto zahrnuty.</p>` : '';
+    add('prognoza', el(`<div class="card"><h3>Roční prognóza</h3>
+      <p class="hint">Kalendářní roky pro srovnání s ČBA, ČNB, MF ČR a bankami.
+      Růst a inflace = průměr roku, sazby = konec roku.
+      ${(A.forecast_years||[]).length?`Prognóza: ${A.forecast_years.join(', ')} (dřívější roky skutečnost).`:''}</p>
+      <div style="overflow-x:auto"><table><thead><tr><th>Veličina</th>${head}</tr></thead>
+      <tbody>${body}</tbody></table></div>${src}</div>`));
   }
 
-  // ── ČNB tabulka (markdown -> HTML) ────────────────────────────────────
+  // ── Prognóza: záložky se generují Z DAT (nic natvrdo) ─────────────────
+  const vars = D.variables || {};
+  const keys = Object.keys(vars);
+  if (keys.length) {
+    const card = el(`<div class="card"><h3>Vývoj po čtvrtletích</h3>
+      <p class="hint">Plná čára: skutečnost. Přerušovaná: medián prognózy. Pásma: 50% a 90% interval.
+      Veličiny jsou seskupené podle oblasti.</p>
+      <div class="tabwrap" id="tabwrap"></div>
+      <div class="chart"><canvas id="mainChart"></canvas></div></div>`);
+    add('prognoza', card);
+
+    let chart = null;
+    const draw = (k) => {
+      const v = vars[k];
+      const hist = v.history, fc = v.forecast;
+      const labels = hist.map(p=>qLabel(p.date)).concat(fc.map(p=>qLabel(p.date)));
+      const pad = hist.map(()=>null);
+      const link = hist.length ? hist[hist.length-1].value : null;
+      const ds = [
+        {label:'Skutečnost', data:hist.map(p=>p.value).concat(fc.map(()=>null)),
+         borderColor:F.navy, borderWidth:2.4, pointRadius:0, tension:.25},
+        {label:'Prognóza', data:pad.slice(0,-1).concat([link], fc.map(p=>p.median)),
+         borderColor:F.blue, borderWidth:2.4, borderDash:[6,3], pointRadius:0, tension:.25},
+        {label:'90 %', data:pad.slice(0,-1).concat([link], fc.map(p=>p.upper_90)),
+         borderColor:'transparent', backgroundColor:F.band90, fill:'+1', pointRadius:0},
+        {label:'_l90', data:pad.slice(0,-1).concat([link], fc.map(p=>p.lower_90)),
+         borderColor:'transparent', pointRadius:0},
+        {label:'50 %', data:pad.slice(0,-1).concat([link], fc.map(p=>p.upper_50)),
+         borderColor:'transparent', backgroundColor:F.band50, fill:'+1', pointRadius:0},
+        {label:'_l50', data:pad.slice(0,-1).concat([link], fc.map(p=>p.lower_50)),
+         borderColor:'transparent', pointRadius:0},
+      ];
+      if (chart) chart.destroy();
+      chart = new Chart(card.querySelector('#mainChart'), {
+        type:'line', data:{labels, datasets:ds},
+        options:{responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+          plugins:{legend:{labels:{filter:i=>!i.text.startsWith('_'), boxWidth:12, font:{size:11}}},
+            tooltip:{filter:i=>!i.dataset.label.startsWith('_'),
+              callbacks:{label:c=>c.dataset.label+': '+fmt(c.parsed.y,2)+' '+v.unit}}},
+          scales:{y:{grid:{color:'#E8ECF5'},ticks:{font:{size:11}},title:{display:true,text:v.unit}},
+                  x:{grid:{display:false},ticks:{maxTicksLimit:10,font:{size:10}}}}}
+      });
+    };
+
+    // Záložky po skupinách: headline veličiny první v rámci skupiny.
+    const tw = card.querySelector('#tabwrap');
+    const groups = [...new Set(keys.map(k=>vars[k].group))]
+      .sort((a,b)=>{const ia=GROUP_ORDER.indexOf(a), ib=GROUP_ORDER.indexOf(b);
+                    return (ia<0?99:ia)-(ib<0?99:ib);});
+    let firstKey = null;
+    groups.forEach(g => {
+      const inG = keys.filter(k=>vars[k].group===g)
+        .sort((a,b)=>(vars[b].headline?1:0)-(vars[a].headline?1:0));
+      const row = el(`<div class="tabgroup"><span class="tg-lbl">${GROUP_LABEL[g]||g}</span>
+        <div class="tabs"></div></div>`);
+      const box = row.querySelector('.tabs');
+      inG.forEach(k => {
+        const b = el(`<button class="tab">${vars[k].label}</button>`);
+        b.onclick = () => { tw.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+                            b.classList.add('on'); draw(k); };
+        box.appendChild(b);
+        if (!firstKey) { firstKey = k; b.classList.add('on'); }
+      });
+      tw.appendChild(row);
+    });
+    draw(firstKey);
+  }
+
+  // ── Prognóza: očekávání hlavních inflačních veličin (markdown -> HTML) ─
   if (D.cnb_table) {
     const rows = D.cnb_table.split('\n')
       .filter(l => l.trim().startsWith('|') && !/^\|[-\s|]+\|$/.test(l.trim()))
@@ -410,21 +446,103 @@ function render(D){
         `<tr><td>${r[0]}</td><td>${r[1]}</td><td class="num">${r[2]}</td></tr>`).join('');
       const notes = D.cnb_table.split('\n').filter(l=>l.trim().startsWith('>'))
         .map(l=>l.replace(/^>\s*/,'').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')).join('<br>');
-      app.appendChild(el(`<div class="card"><h2>Očekávání hlavních inflačních veličin</h2>
-        <table><thead><tr><th>Indikátor</th><th>Horizont</th><th style="text-align:right">Hodnota</th></tr></thead>
-        <tbody>${body}</tbody></table>
+      add('prognoza', el(`<div class="card"><h3>Očekávání hlavních inflačních veličin</h3>
+        <div style="overflow-x:auto"><table><thead><tr><th>Indikátor</th><th>Horizont</th>
+        <th style="text-align:right">Hodnota</th></tr></thead>
+        <tbody>${body}</tbody></table></div>
         <p class="hint" style="margin-top:12px">${notes}</p></div>`));
     }
   }
 
-  // ── Parametry běhu (transparentnost) ──────────────────────────────────
+  // ── Rozbor: dekompozice inflace ───────────────────────────────────────
+  if (D.decomposition) {
+    const ch = D.decomposition.channels, names = Object.keys(ch);
+    const hz = Object.keys(ch[names[0]]).sort((a,b)=>a-b);
+    const card = el(`<div class="card"><h3>Z čeho se skládá inflační prognóza</h3>
+      <p class="hint">Příspěvek kanálu = plný model minus model s vypnutým kanálem (identické šoky).
+      Zbytek do celku tvoří vlastní dynamika inflace.</p>
+      <div class="chart sm"><canvas id="decompChart"></canvas></div></div>`);
+    add('rozbor', card);
+    new Chart(card.querySelector('#decompChart'), {
+      type:'bar',
+      data:{labels:names, datasets:hz.map((q,i)=>({
+        label:`za ${q} čtvrtletí`, data:names.map(n=>ch[n][q]),
+        backgroundColor:i===0?F.blue:'#7A9BD4'}))},
+      options:{indexAxis:'y', responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{labels:{boxWidth:12,font:{size:11}}},
+          tooltip:{callbacks:{label:c=>c.dataset.label+': '+(c.parsed.x>0?'+':'')+fmt(c.parsed.x,2)+' pp'}}},
+        scales:{x:{grid:{color:'#E8ECF5'},title:{display:true,text:'procentní body'},ticks:{font:{size:11}}},
+                y:{grid:{display:false},ticks:{font:{size:11}}}}}
+    });
+  }
+
+  // ── Rozbor: scénáře ───────────────────────────────────────────────────
+  if (D.scenarios && D.scenarios.length) {
+    const S = D.scenarios;
+    const card = el(`<div class="card"><h3>Scénáře</h3>
+      <p class="hint">Liší se kredibilitou ČNB (ukotvení očekávání) a domácími nákladovými tlaky.
+      Sazby v každém scénáři reagují Taylorovým pravidlem.</p>
+      <div class="chart sm"><canvas id="scenChart"></canvas></div>
+      <div style="margin-top:14px" id="scenList"></div></div>`);
+    add('rozbor', card);
+    const labels = S[0].hicp.map(p=>qLabel(p.date));
+    new Chart(card.querySelector('#scenChart'), {
+      type:'line',
+      data:{labels, datasets:S.map(s=>({label:s.name, data:s.hicp.map(p=>p.median),
+        borderColor:s.color, borderWidth:2.4, borderDash:[6,3], pointRadius:2.5, tension:.25}))},
+      options:{responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+        plugins:{legend:{labels:{boxWidth:12,font:{size:11}}},
+          tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.parsed.y,2)+' %'}}},
+        scales:{y:{grid:{color:'#E8ECF5'},title:{display:true,text:'inflace HICP (%)'},ticks:{font:{size:11}}},
+                x:{grid:{display:false},ticks:{font:{size:10}}}}}
+    });
+    const list = card.querySelector('#scenList');
+    S.forEach(s => list.appendChild(el(
+      `<div class="scen" style="border-left:4px solid ${s.color}">
+         <b>${s.name}</b> <span style="color:var(--muted);font-size:12px">
+         (λ=${s.anchoring}, tlak ${s.housing_pressure} pp)</span>
+         <p>${s.popis}</p></div>`)));
+  }
+
+  // ── O modelu: parametry běhu (transparentnost) ────────────────────────
   if (D.parameters) {
     const chips = Object.entries(D.parameters)
       .map(([k,v])=>`<span class="chip">${k} = ${v}</span>`).join('');
-    app.appendChild(el(`<div class="card"><h2>Nastavení modelu</h2>
+    add('model', el(`<div class="card"><h3>Nastavení modelu</h3>
       <p class="hint">Hodnoty parametrů, se kterými byla tato prognóza spočítána.</p>
       <div class="params">${chips}</div></div>`));
   }
+
+  buildNav(secEl);
+}
+
+// ── Rychlá navigace: postavit z NEPRÁZDNÝCH sekcí a zvýrazňovat aktivní ──
+function buildNav(secEl){
+  const live = SECTIONS.filter(s => secEl[s.id].querySelector('.card, .hero'));
+  SECTIONS.filter(s => !live.includes(s)).forEach(s => secEl[s.id].remove());
+  if (live.length < 2) return;
+
+  const ul = document.getElementById('toc');
+  live.forEach(s => ul.appendChild(el(
+    `<li><a href="#${s.id}" data-sec="${s.id}">${s.nav}</a></li>`)));
+  document.getElementById('nav').hidden = false;
+
+  const links = [...ul.querySelectorAll('a')];
+  const mark = () => {
+    const y = window.scrollY + 90;   // ~výška sticky lišty + rezerva
+    let cur = live[0].id;
+    live.forEach(s => {
+      const top = secEl[s.id].getBoundingClientRect().top + window.scrollY;
+      if (top <= y) cur = s.id;
+    });
+    // U konce stránky vždy poslední sekce, i kdyby byla krátká.
+    if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 2)
+      cur = live[live.length-1].id;
+    links.forEach(a => a.classList.toggle('on', a.dataset.sec === cur));
+  };
+  mark();
+  addEventListener('scroll', mark, {passive:true});
+  addEventListener('resize', mark);
 }
 </script>
 </body>
