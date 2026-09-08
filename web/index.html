@@ -78,6 +78,28 @@ td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
 .scen b{font-size:14px}
 .scen p{margin:3px 0 0;font-size:12.5px;color:var(--muted)}
 .params{display:flex;flex-wrap:wrap;gap:7px}
+
+/* ── Dokumentace v sekci „O modelu" ────────────────────────────────────── */
+.card a{color:var(--blue);font-weight:500}
+.card p{font-size:13.5px}
+.btnrow{display:flex;flex-wrap:wrap;gap:9px;margin-top:12px}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:9px 16px;border-radius:8px;
+ text-decoration:none;font-size:13.5px;font-weight:600;border:1px solid var(--grid);
+ background:var(--card);color:var(--navy);transition:.15s}
+.btn:hover{border-color:var(--blue);color:var(--blue)}
+.btn.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.btn.primary:hover{background:#002F7E;color:#fff}
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:12px 0}
+.flow span{background:var(--bg);border-radius:6px;padding:5px 11px;font-size:12.5px;font-weight:600}
+.flow i{color:var(--muted);font-style:normal}
+.dl{margin:10px 0 0}
+.dl>div{display:flex;gap:14px;padding:7px 0;border-bottom:1px solid var(--grid);font-size:13px}
+.dl>div:last-child{border-bottom:0}
+.dl b{flex:none;width:120px}
+.dl span{color:var(--muted)}
+.cite{background:var(--bg);border-left:3px solid var(--blue);border-radius:0 6px 6px 0;
+ padding:10px 14px;font-size:12.5px;margin:10px 0 0}
+@media(max-width:600px){.dl>div{display:block}.dl b{width:auto;display:block}}
 .chip{background:var(--bg);border-radius:6px;padding:4px 10px;font-size:12px;
  font-family:'IBM Plex Mono',ui-monospace,monospace}
 footer{color:var(--muted);font-size:12px;text-align:center;margin-top:34px;
@@ -149,7 +171,7 @@ const SECTIONS = [
   {id:'rozbor',   nav:'Rozbor',     title:'Rozbor',
    desc:'Proč prognóza vychází tak, jak vychází: z čeho se skládá a jak by se změnila za jiných předpokladů.'},
   {id:'model',    nav:'O modelu',   title:'O modelu',
-   desc:'Nastavení, se kterým tato prognóza běžela.'},
+   desc:'Co model počítá, odkud bere data, jak přesně predikuje a za jakých podmínek ho můžete použít.'},
 ];
 
 fetch('data/latest.json?_=' + Date.now())
@@ -503,6 +525,94 @@ function render(D){
          (λ=${s.anchoring}, tlak ${s.housing_pressure} pp)</span>
          <p>${s.popis}</p></div>`)));
   }
+
+  // ── O modelu: co to je a jak to funguje ───────────────────────────────
+  add('model', el(`<div class="card"><h3>Co je NOSTRADAMUP</h3>
+    <p>Čtvrtletní makroekonomický prognostický model české ekonomiky, vyvíjený na
+    Metropolitní univerzitě Praha. Název je hříčka: MUP a Nostradamus.</p>
+    <p>Je to <b>semi-strukturální novokeynesiánský model</b>. Jádrem je statistický
+    AR proces, na který jsou navěšené ekonomické kanály jako korekce se zpětnými
+    vazbami. Má kompletní tříravnicové novokeynesiánské jádro (IS křivka,
+    Phillipsova křivka, Taylorovo pravidlo), ale <b>není to plný DSGE</b>: nemá
+    mikrozáklady ani racionální očekávání řešená dopředu. Tenhle rozdíl přiznáváme,
+    protože určuje, co od modelu čekat.</p>
+    <p style="margin-bottom:0"><b>Kauzální řetěz</b> se řeší iterativně, dvěma průchody.
+    HDP potřebuje očekávanou inflaci pro reálnou sazbu, ale inflace zase potřebuje HDP,
+    takže se nejdřív odhadne inflace, projede celý řetěz a pak se zpřesní:</p>
+    <div class="flow">
+      <span>sazby</span><i>→</i><span>reálná sazba</span><i>→</i><span>HDP</span>
+      <i>→</i><span>nezaměstnanost</span><i>→</i><span>mzdy</span><i>→</i>
+      <span>inflace</span><i>↩ zpět do sazeb</i>
+    </div>
+    <p>Klíčová vlastnost: inflační očekávání nejsou ukotvená k pevnému dvouprocentnímu
+    cíli, ale k <b>lepkavému jádru</b>, které se samo pomalu posouvá podle mzdových
+    a nákladových tlaků. Proto model nedává mechanický návrat ke dvěma procentům
+    a vychází blíž prognózám bank.</p>
+    <p style="margin-bottom:0">Model neprodukuje jen bodová čísla, ale <b>fan charty
+    s intervaly spolehlivosti</b> z Monte Carlo simulací, scénáře, dekompozici inflace
+    na jednotlivé kanály a nowcasty pro období, která statistický úřad ještě nezveřejnil.</p>
+    <div class="btnrow">
+      <a class="btn primary" href="docs_model.html">Technická dokumentace (25 kapitol)</a>
+    </div>
+    <p class="hint" style="margin:10px 0 0">Dokumentace je psaná pro makroekonomy:
+    rovnice jednotlivých kanálů, kalibrace parametrů, odkazy na literaturu,
+    výsledky backtestu a přiznané limity.</p></div>`));
+
+  // ── O modelu: datové zdroje ───────────────────────────────────────────
+  add('model', el(`<div class="card"><h3>Odkud jsou data</h3>
+    <p class="hint">Model si všechna data stahuje sám z veřejných zdrojů, nic se
+    nezadává ručně. Přepočítává se automaticky každé pondělí.</p>
+    <div class="dl">
+      <div><b>ČSÚ</b><span>index spotřebitelských cen (národní CPI, který cíluje ČNB),
+        harmonizovaný HICP, průměrné mzdy a týdenní ceny pohonných hmot</span></div>
+      <div><b>Eurostat</b><span>HDP a jeho složky, nezaměstnanost podle šetření
+        pracovních sil, měsíční indikátory pro nowcast HDP</span></div>
+      <div><b>ČNB</b><span>devizové kurzy, sazby PRIBOR, repo sazba</span></div>
+      <div><b>MF ČR</b><span>makroekonomická predikce pro srovnání v roční tabulce.
+        ČNB a ČBA publikují prognózy jen v PDF, automaticky je stáhnout nelze</span></div>
+    </div>
+    <p class="hint" style="margin:12px 0 0">Vstupní data se řídí podmínkami těchto
+    institucí, ne licencí tohoto projektu.</p></div>`));
+
+  // ── O modelu: přesnost a limity ───────────────────────────────────────
+  add('model', el(`<div class="card"><h3>Jak přesně model predikuje</h3>
+    <p>Každá veličina se ověřuje <b>out-of-sample backtestem</b>: model se natrénuje
+    jen na datech dostupných v daném okamžiku a predikuje dopředu, takže nevidí
+    budoucnost. Měřítkem je Theilovo U, tedy poměr chyby modelu k chybě náhodné
+    procházky. Hodnota pod jedničkou znamená, že model je lepší než triviální
+    předpověď „bude to jako teď“.</p>
+    <p><b>Osm z deseti veličin poráží náhodnou procházku.</b> Nejlépe repo sazba
+    a nezaměstnanost, nejhůř devizové kurzy, které prohrávají. To je ale
+    <b>očekávané a známé</b>: kurzy na krátkém horizontu neporazí náhodnou procházku
+    prakticky nikdo, což je klasický výsledek Meese a Rogoffa z roku 1983.</p>
+    <p style="margin-bottom:0">Co od modelu <b>nečekat</b>: přesná bodová čísla.
+    Proto jsou všude intervaly spolehlivosti. Model také ze své podstaty nepředpoví
+    šoky, které nemá odkud vidět, například energetickou krizi roku 2022. Kde model
+    naráží na hranici, je to na webu napsané u konkrétního čísla, ne schované.</p></div>`));
+
+  // ── O modelu: open source a použití ───────────────────────────────────
+  add('model', el(`<div class="card"><h3>Open source a použití</h3>
+    <p>Celý projekt je otevřený. Kód, data i tenhle web jsou na GitHubu, včetně
+    historie všech prognóz, takže se dá zpětně ověřit, co model kdy tvrdil.</p>
+    <div class="btnrow">
+      <a class="btn primary" href="https://github.com/dominikstroukal/nostradamup"
+         target="_blank" rel="noopener">Zdrojový kód na GitHubu</a>
+      <a class="btn" href="https://github.com/dominikstroukal/nostradamup/blob/main/LICENSE-CONTENT.md"
+         target="_blank" rel="noopener">Licence</a>
+    </div>
+    <p style="margin-top:16px"><b>Použijte to, na co potřebujete.</b> Prognózy, grafy
+    i dokumentaci můžete volně sdílet, upravovat a citovat, včetně komerčního užití
+    a diplomových prací. Jediná podmínka je <b>uvést autora</b>.</p>
+    <div class="cite">Zdroj: NOSTRADAMUP (Dominik Stroukal, Metropolitní univerzita
+      Praha), dominikstroukal.github.io/nostradamup, CC BY 4.0</div>
+    <div class="dl">
+      <div><b>Kód</b><span>licence MIT</span></div>
+      <div><b>Výstupy a dokumentace</b><span>licence Creative Commons
+        Attribution 4.0 (CC BY 4.0)</span></div>
+    </div>
+    <p class="hint" style="margin:14px 0 0">Model je výzkumný a vzdělávací projekt,
+    ne investiční doporučení. Prognózy jsou publikované bez záruky za přesnost
+    a bez odpovědnosti za rozhodnutí, která na nich někdo postaví.</p></div>`));
 
   // ── O modelu: parametry běhu (transparentnost) ────────────────────────
   if (D.parameters) {

@@ -50,3 +50,26 @@ a publikuje web na GitHub Pages.
 | `sketch_report.py` | grafy v ručně kresleném stylu |
 | `export_web.py` | export do JSON pro web |
 | `web/` | statický frontend |
+| `web/docs_model.html` | technická dokumentace modelu (25 kapitol) |
+
+## Dokumentace
+
+Kompletní technický popis modelu (kanály, kalibrace, backtest, limity):
+<https://dominikstroukal.github.io/nostradamup/docs_model.html>
+
+## Licence
+
+Projekt je open source a **můžete ho volně použít, stačí uvést autora.**
+
+- **Kód** (`*.py`, `web/index.html`, workflow): [MIT](LICENSE).
+- **Výstupy a dokumentace** (prognózy, `web/data/*.json`, `docs_model.html`,
+  grafy a texty na webu): [CC BY 4.0](LICENSE-CONTENT.md).
+
+Citace:
+
+> Zdroj: NOSTRADAMUP (Dominik Stroukal, Metropolitní univerzita Praha),
+> https://dominikstroukal.github.io/nostradamup/, CC BY 4.0
+
+Vstupní data pocházejí od ČSÚ, Eurostatu, ČNB a MF ČR a řídí se podmínkami
+těchto institucí. Model je výzkumný a vzdělávací projekt, ne investiční
+doporučení, a je publikovaný bez záruky.
