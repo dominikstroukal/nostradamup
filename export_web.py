@@ -353,8 +353,14 @@ def build_payload(args) -> dict:
 
     # ── Headline čísla (inflace 1Y a 3Y = jádro sdělení) ────────────────────
     def _at(var, q):
+        """Medián prognózy v Q+q. Zaokrouhlení řeší AŽ frontend.
+
+        Dřív se tu zaokrouhlovalo na jedno desetinné místo, což u sazeb lhalo:
+        repo 3,75 se zobrazilo jako 3,8, tedy úroveň, kterou ČNB nemůže nastavit
+        (hýbe se po 25 bp), a navíc to nesedělo s grafem ani roční tabulkou.
+        """
         try:
-            return round(float(variables[var]["forecast"][q - 1]["median"]), 1)
+            return round(float(variables[var]["forecast"][q - 1]["median"]), 2)
         except Exception:
             return None
 

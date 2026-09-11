@@ -966,12 +966,19 @@ def _forecast_taylor_repo(
         all_paths.append(path[1:])
 
     all_paths = np.array(all_paths)
+    # Repo je DISKRÉTNÍ: ČNB hýbe po 25 bp. Výchozí lineární interpolace
+    # v np.percentile průměruje dva prostřední běhy, takže by medián mohl
+    # vyjít třeba 3,875, tedy sazba, kterou ČNB nemůže vyhlásit. 'nearest'
+    # vrací skutečnou simulovanou hodnotu, čímž zůstane na mřížce 25 bp.
+    def _q(p):
+        return np.percentile(all_paths, p, axis=0, method="nearest")
+
     return pd.DataFrame({
-        "lower_90": np.percentile(all_paths, 5,  axis=0),
-        "lower_50": np.percentile(all_paths, 25, axis=0),
-        "median":   np.percentile(all_paths, 50, axis=0),
-        "upper_50": np.percentile(all_paths, 75, axis=0),
-        "upper_90": np.percentile(all_paths, 95, axis=0),
+        "lower_90": _q(5),
+        "lower_50": _q(25),
+        "median":   _q(50),
+        "upper_50": _q(75),
+        "upper_90": _q(95),
     }, index=fut)
 
 
