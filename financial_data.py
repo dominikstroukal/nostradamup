@@ -352,13 +352,48 @@ def _fallback_pribor() -> pd.Series:
 
 
 
+_REPO_NOW_PATH = os.path.join(RAW_DIR, "repo_current.json")
+
+
+def _save_repo_current(rate: float, since) -> None:
+    """Zapamatuj si PRÁVĚ PLATNOU repo sazbu (viz _load_repo_current)."""
+    import json
+    try:
+        os.makedirs(RAW_DIR, exist_ok=True)
+        with open(_REPO_NOW_PATH, "w", encoding="utf-8") as f:
+            json.dump({"rate": float(rate), "since": str(pd.Timestamp(since).date())}, f)
+    except Exception as e:
+        log.debug("repo_current.json nezapsán: %s", e)
+
+
+def _load_repo_current() -> float | None:
+    """Právě platná repo sazba, nebo None.
+
+    Repo je ADMINISTRATIVNÍ sazba: úroveň platná dnes je známý fakt, ne odhad.
+    `_extend_to_present` ale ořízne řadu na poslední KOMPLETNÍ čtvrtletí, takže
+    by se už vyhlášená sazba běžícího čtvrtletí zahodila a prognóza by
+    startovala z průměru minulého Q (reálně: 3,53 místo platných 3,75).
+    Čte se JEN v produkci (`forecast_financial`); backtest volá
+    `_forecast_taylor_repo` přímo, aby mu dnešní sazba neprosákla do minulosti.
+    """
+    import json
+    try:
+        with open(_REPO_NOW_PATH, encoding="utf-8") as f:
+            return float(json.load(f)["rate"])
+    except Exception:
+        return None
+
+
 def fetch_repo_rate(start: str = "2010-01-01") -> pd.Series:
     """Repo sazba CNB - zkusi vice URL variant, fallback na zalozni data."""
     log.info("CNB <- Repo sazba")
+    # POZOR: ČNB nemá pro sazby API, ale VYSTAVUJE historii změn jako TXT
+    # (datum|sazba, jeden řádek na změnu). Odkaz je na stránce „Měnová politika
+    # / Nástroje MP". Tři dřívější adresy nefungují (404), proto model roky
+    # tiše jel ze záložních dat a zaspal zvýšení na 3,75 % z 19. 6. 2026.
     urls = [
+        "https://www.cnb.cz/cs/casto-kladene-dotazy/.galleries/vyvoj_repo_historie.txt",
         "https://www.cnb.cz/cs/casto-kladene-dotazy/Jak-se-vyvijela-dvoutydenni-repo-sazba-CNB/repo_2T_CZ.txt",
-        "https://www.cnb.cz/cs/casto-kladene-dotazy/Jak-se-vyvijela-dvoutydenni-repo-sazba-CNB/repo_CZ.txt",
-        "https://www.cnb.cz/cs/casto-kladene-dotazy/Jak-se-vyvijela-dvoutydenni-repo-sazba-CNB/repo_historie.txt",
     ]
     for url in urls:
         try:
@@ -374,16 +409,31 @@ def fetch_repo_rate(start: str = "2010-01-01") -> pd.Series:
                     parts = line.split(sep)
                     if len(parts) >= 2:
                         try:
-                            dt  = pd.to_datetime(parts[0].strip(), dayfirst=True)
+                            d0 = parts[0].strip()
+                            # ČNB píše datum jako YYYYMMDD; bez explicitního
+                            # formátu to pandas jen hádá (a hlásí varování).
+                            dt = (pd.to_datetime(d0, format="%Y%m%d")
+                                  if d0.isdigit() and len(d0) == 8
+                                  else pd.to_datetime(d0, dayfirst=True))
                             val = float(parts[1].strip().replace(",", "."))
                             records[dt] = val
                             break
                         except Exception:
                             continue
             if len(records) > 5:
-                s = pd.Series(records, name="repo_rate").sort_index()
+                chg = pd.Series(records, name="repo_rate").sort_index()
+                # TXT obsahuje jen DATA ZMĚN. Mezi zasedáními sazba platí beze
+                # změny, takže se musí rozprostřít na dny PŘED ořezem na 'start'
+                # (jinak by vypadla čtvrtletí bez zasedání i úroveň platná
+                # k datu startu) a teprve pak se agreguje na čtvrtletí.
+                days = pd.date_range(chg.index[0], pd.Timestamp.today().normalize(),
+                                     freq="D")
+                s = chg.reindex(days).ffill()
                 s = s[s.index >= start]
-                log.info("Repo sazba nactena z %s: %d pozorovani", url, len(s))
+                s.name = "repo_rate"
+                _save_repo_current(chg.iloc[-1], chg.index[-1])
+                log.info("Repo sazba: živě z ČNB, %d změn, platná %.2f %% od %s",
+                         len(chg), float(chg.iloc[-1]), chg.index[-1].date())
                 return s
         except Exception as e:
             log.debug("Repo URL %s: %s", url, e)
@@ -825,6 +875,10 @@ def _forecast_taylor_repo(
                                      # False: Taylor reaguje na plnou úroveň inflace (scénáře)
     smoothing: float = 0.0,          # ρ: setrvačnost sazeb (0 = baseline beze změny chování,
                                      # ~0.7 pro scénáře: postupné, vyhlazené reakce ČNB)
+    current_rate: float | None = None,  # právě platná sazba; ČNB krokuje od NÍ,
+                                     # ne od průměru minulého Q (viz _load_repo_current).
+                                     # Předává JEN produkce, aby backtestu
+                                     # neprosákla budoucnost do minulosti.
 ) -> pd.DataFrame:
     """
     Prognóza repo sazby ČNB pomocí stochastického Taylorova pravidla.
@@ -838,7 +892,8 @@ def _forecast_taylor_repo(
     """
     repo = _extend_to_present(repo)
     vals = repo.values.astype(float)
-    current = vals[-1]
+    # Startovní úroveň: platná sazba, když ji známe. Jinak poslední kompletní Q.
+    current = float(current_rate) if current_rate is not None else vals[-1]
 
     # Defaultní path (pokud není zadán): inflace konverguje k cíli, gap = 0
     if inflation_path is None:
@@ -946,6 +1001,10 @@ def forecast_financial(
         if var in df.columns:
             intervals[var] = _forecast_rw(df[var].dropna(), steps=steps)
 
+    # Právě platná repo sazba (administrativní, tedy známý fakt). Čte se JEN
+    # tady, v produkčním vstupu; backtest volá _forecast_taylor_repo přímo.
+    repo_now = _load_repo_current()
+
     # Repo sazba - POŘADÍ DŮLEŽITÉ: počítá se před PRIBOR, který ji sleduje.
     repo_path = None
     if "repo_rate" in df.columns:
@@ -958,6 +1017,7 @@ def forecast_financial(
             intervals["repo_rate"] = _forecast_taylor_repo(
                 df["repo_rate"].dropna(),
                 steps=steps,
+                current_rate=repo_now,
                 neutral_rate=repo_neutral,
             )
         repo_path = intervals["repo_rate"]["median"].tolist()

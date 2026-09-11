@@ -260,61 +260,76 @@ def _fallback_wages() -> pd.Series:
 # 3b. ČSÚ – národní index spotřebitelských cen (CPI)
 # ─────────────────────────────────────────────
 
-_CSU_CPI_CSV   = "https://data.csu.gov.cz/opendata/sady/WCEN01M/distribuce/csv"
-_CSU_CPI_VYBER = "https://data.csu.gov.cz/api/dotaz/v1/data/vybery/WCEN01MT01"
+# Aktuální sada národního CPI. POZOR: dřívější WCEN01M ČSÚ VYŘADIL (katalog
+# vrací 404) a s ní zemřel i její živý výběr WCEN01MT01, takže inflace tiše
+# zamrzla na prosinci 2025. CEN0101E je nástupce a má běžné měsíce.
+# Stará sada pořád servíruje statické CSV, proto se z ní bere jen historie
+# před 2015, odkud CEN0101E začíná (jinak by se zkrátil celý dataset).
+_CSU_CPI_CSV     = "https://data.csu.gov.cz/opendata/sady/CEN0101E/distribuce/csv"
+_CSU_CPI_OLD_CSV = "https://data.csu.gov.cz/opendata/sady/WCEN01M/distribuce/csv"
 
-
-_CSU_CPI_INDICATORS = {
+# CEN0101E dává rovnou tempa růstu (%), ne indexy.
+_CSU_CPI_TYPES = {"RM": "mom", "RR": "yoy", "IZ2015": "idx"}
+# Vyřazená WCEN01M dávala indexy, kde se odečítá 100.
+_CSU_CPI_OLD_INDICATORS = {
     "6134J01":  "mom",   # předchozí měsíc = 100
     "6134IPAC": "yoy",   # stejné období předchozího roku = 100
     "6134IPAZ": "idx",   # průměr roku 2015 = 100 (bazický index)
 }
 
 
-def fetch_csu_cpi_monthly() -> pd.DataFrame:
-    """Měsíční národní CPI (ČSÚ): sloupce mom, yoy [%] a idx (2015 = 100).
-
-    Jeden průchod přes opendata CSV (historie od 1997) + živý předdefinovaný
-    výběr, který dotáhne aktuální měsíce (CSV bývá do konce minulého roku).
-    Bazický index je tu proto, aby šlo z meziměsíční změny přesně dopočítat
-    meziroční (viz nowcast_cpi.py); z meziročních hodnot to nejde.
-    """
+def _csu_cpi_history() -> pd.DataFrame:
+    """Historie CPI z vyřazené sady WCEN01M (indexy → procenta)."""
     from io import BytesIO
-    log.info("ČSÚ ← národní CPI měsíčně (opendata CSV + živý výběr)")
-    r = requests.get(_CSU_CPI_CSV, timeout=90)
+    r = requests.get(_CSU_CPI_OLD_CSV, timeout=90)
     r.raise_for_status()
     df = pd.read_csv(BytesIO(r.content))
     df = df[df["Uz0"] == "CZ"]
     cols = {}
-    for it, col in _CSU_CPI_INDICATORS.items():
+    for it, col in _CSU_CPI_OLD_INDICATORS.items():
         d = df[df["IndicatorType"] == it]
         cols[col] = pd.Series(d["Hodnota"].astype(float).values,
                               index=pd.to_datetime(d["CasM"] + "-01")).sort_index()
     m = pd.DataFrame(cols).sort_index()
-
-    # Aktuální tail z živého výběru (opendata CSV bývá o pár měsíců pozadu).
-    try:
-        j = requests.get(_CSU_CPI_VYBER, timeout=40,
-                         headers={"Accept": "application/json"}).json()
-        dim = j["dimension"]
-        cas = dim["CasM"]["category"]["index"]
-        iti = dim["IndicatorType"]["category"]["index"]
-        val, nC = j["value"], len(cas)
-        for it, col in _CSU_CPI_INDICATORS.items():
-            if it not in iti:
-                continue
-            for code, ci in cas.items():
-                k = iti[it] * nC + ci   # rozměr [Uz0(1), IndicatorType, CasM]
-                v = val.get(str(k)) if isinstance(val, dict) else (val[k] if k < len(val) else None)
-                if v is not None:
-                    m.loc[pd.Timestamp(code + "-01"), col] = float(v)
-    except Exception as e:
-        log.info("  (živý výběr CPI přeskočen: %s)", e)
-
-    m = m.sort_index()
-    m["mom"] = m["mom"] - 100.0     # index -> procentní změna
+    m["mom"] = m["mom"] - 100.0
     m["yoy"] = m["yoy"] - 100.0
     return m
+
+
+def fetch_csu_cpi_monthly() -> pd.DataFrame:
+    """Měsíční národní CPI (ČSÚ): sloupce mom, yoy [%] a idx (2015 = 100).
+
+    Bazický index je tu proto, aby šlo z meziměsíční změny přesně dopočítat
+    meziroční (viz nowcast_cpi.py); z meziročních hodnot to nejde.
+    """
+    from io import BytesIO
+    log.info("ČSÚ ← národní CPI měsíčně (CEN0101E)")
+    r = requests.get(_CSU_CPI_CSV, timeout=300)
+    r.raise_for_status()
+    use = ["TYPUDAJE4A", "CZCOICOP2.CZCOP1", "CZCOICOP2.CZCOP23",
+           "EKAKTIOCDS", "UZ02P", "CASMKMQRM12", "Hodnota"]
+    df = pd.read_csv(BytesIO(r.content), low_memory=False, usecols=use)
+    # Úhrn (COICOP oddíl 0 bez podrobnější třídy), domácnosti celkem, Česko.
+    # Čas nese i kumulace, klouzavé průměry, čtvrtletí a roky, proto jen měsíce.
+    d = df[(df["EKAKTIOCDS"] == 0) & (df["UZ02P"] == "CZ")
+           & (df["CZCOICOP2.CZCOP1"].astype(str) == "0")
+           & (df["CZCOICOP2.CZCOP23"].isna())
+           & (df["CASMKMQRM12"].astype(str).str.match(r"^\d{4}-\d{2}$"))]
+
+    cols = {}
+    for t, col in _CSU_CPI_TYPES.items():
+        x = d[d["TYPUDAJE4A"] == t].drop_duplicates("CASMKMQRM12")
+        cols[col] = pd.Series(
+            x["Hodnota"].astype(float).values,
+            index=pd.to_datetime(x["CASMKMQRM12"].astype(str) + "-01")).sort_index()
+    m = pd.DataFrame(cols).sort_index()
+
+    # Starší historii (< 2015) doplň z vyřazené sady, ať se dataset nezkrátí.
+    try:
+        m = m.combine_first(_csu_cpi_history())
+    except Exception as e:
+        log.info("  (historie CPI z WCEN01M přeskočena: %s)", e)
+    return m.sort_index()
 
 
 def fetch_csu_cpi() -> pd.Series:

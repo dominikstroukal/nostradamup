@@ -152,8 +152,25 @@ def build_cnb_table(data: pd.DataFrame, forecast: pd.DataFrame,
             return float(fin_df[var].dropna().iloc[-1]) if fin_df is not None else None
         except Exception:
             return None
+
+    def _repo_spot():
+        """U repa je spot PLATNÁ sazba, ne průměr posledního čtvrtletí.
+
+        Řada je čtvrtletní průměr, takže po zvýšení uprostřed kvartálu vyjde
+        mezihodnota (3,53 místo platných 3,75). Repo je ale administrativní
+        sazba a její aktuální úroveň je známý fakt.
+        """
+        try:
+            from financial_data import _load_repo_current
+            r = _load_repo_current()
+            if r is not None:
+                return float(r)
+        except Exception:
+            pass
+        return _spot("repo_rate")
+
     czk_1m  = _nowcast_1m(_spot("eurczk"),  _fc_at(fin_intervals, "eurczk", 1), "fx")
-    repo_1m = _nowcast_1m(_spot("repo_rate"), _fc_at(fin_intervals, "repo_rate", 1), "rate")
+    repo_1m = _nowcast_1m(_repo_spot(), _fc_at(fin_intervals, "repo_rate", 1), "rate")
 
     # 12M PRIBOR: preferuj TRŽNÍ prognózu (fin_intervals["pribor12m"] z ČNB
     # fixingu), jinak fallback na hypotézu očekávání z 3M dráhy.

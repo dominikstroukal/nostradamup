@@ -412,8 +412,26 @@ def build_payload(args) -> dict:
     except Exception as e:
         commentary = ""
         print(f"  (komentář: {e})")
+    # Dotazník ČNB musí stát na STEJNÝCH číslech jako roční tabulka. Kdyby
+    # dostal 'macro', počítal by mzdy i z flat-forwardovaných čtvrtletí, která
+    # ČSÚ nezveřejnil (vycházelo 7,9 % místo 7,3 % za 2026). Posílá se proto
+    # poctivá cesta = skutečnost do obs_end + přeforecast, tedy totéž, co je
+    # ve 'variables'. Prognóza zůstává na UNIFORMNÍM gridu, protože _series_at
+    # v cnb_survey indexuje pozičně (Q+4, Q+12) a per-veličina posunuté starty
+    # by horizonty rozhodily.
+    _cnb_path, _cnb_fc = {}, {}
+    for _v in ("gdp_yoy", "cpi_yoy", "hicp_yoy", "wages_yoy"):
+        if _v not in macro_iv:
+            continue
+        _med = macro_iv[_v]["median"]
+        _p = pd.concat([_real(_v), _med])
+        _cnb_path[_v] = _p[~_p.index.duplicated(keep="last")].sort_index()
+        _cnb_fc[_v] = _med.reindex(forecast.index)
+    macro_cnb = pd.DataFrame(_cnb_path) if _cnb_path else macro
+    forecast_cnb = pd.DataFrame(_cnb_fc) if _cnb_fc else forecast
+
     try:
-        cnb_table = build_cnb_table(macro, forecast, fin_iv, fin_df=fin,
+        cnb_table = build_cnb_table(macro_cnb, forecast_cnb, fin_iv, fin_df=fin,
                                     bond5y=args.bond5y, bond10y=args.bond10y,
                                     swap_spread=args.swap_spread)
     except Exception as e:
