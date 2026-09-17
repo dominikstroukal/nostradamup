@@ -117,11 +117,16 @@ def run_scenario(macro: pd.DataFrame, fin: pd.DataFrame, params: dict,
                         housing_services_pressure=housing)
     inflation_path = infl0["median"].tolist()
 
+    # Start ze skutečně platné sazby, známá čtvrtletí se nehýbou (jako baseline).
+    from financial_data import repo_anchor
+    repo_now, repo_fixed = repo_anchor(repo_s)
+
     result = {}
     for _ in range(n_policy_iters):
         # 1) Repo: Taylor reagující na scénářovou inflaci
         repo_iv = _forecast_taylor_repo(
             repo_s, inflation_path=inflation_path, steps=steps,
+            current_rate=repo_now, fixed_steps=repo_fixed,
             neutral_rate=repo_neutral,
             anchor_to_neutral=False,   # scénáře: sazby reagují na úroveň inflace
             smoothing=0.7,             # setrvačnost: ČNB reaguje postupně

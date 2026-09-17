@@ -242,12 +242,23 @@ def build_payload(args) -> dict:
             housing_services_pressure=args.housing_pressure)
         _all_iv["hicp_yoy"] = macro_iv["hicp_yoy"]
 
+    # Repo je administrativní: když v běžícím čtvrtletí už ČNB nemá žádné
+    # měnověpolitické jednání, je jeho koncová sazba známá. Takové čtvrtletí
+    # patří do skutečnosti, ne do prognózy (v simulaci je stejně pevné).
+    from financial_data import load_repo_known
+    repo_known = load_repo_known()
+
     variables = {}
     for var, iv in {**macro_iv, **fin_iv}.items():
         label, unit, group, headline = META.get(var, (var, "", "ostatní", False))
+        hist = _real(var)
+        if var == "repo_rate" and repo_known and repo_known[0] > obs_end(var):
+            kt = repo_known[0]
+            hist = pd.concat([hist, iv["median"][iv.index <= kt]])
+            iv = iv[iv.index > kt]
         variables[var] = {
             "label": label, "unit": unit, "group": group, "headline": headline,
-            "history": _hist(_real(var)),
+            "history": _hist(hist),
             "forecast": _ser(iv),
         }
 
@@ -359,8 +370,13 @@ def build_payload(args) -> dict:
         repo 3,75 se zobrazilo jako 3,8, tedy úroveň, kterou ČNB nemůže nastavit
         (hýbe se po 25 bp), a navíc to nesedělo s grafem ani roční tabulkou.
         """
+        # Podle DATA, ne podle pozice: veličiny startují prognózu v různých Q
+        # (mzdy dřív, známé repo později), takže „Q+4“ musí být pro všechny
+        # stejné čtvrtletí.
+        target = (LAST_COMPLETE + pd.DateOffset(months=3 * q)).strftime("%Y-%m-%d")
         try:
-            return round(float(variables[var]["forecast"][q - 1]["median"]), 2)
+            v = next(p for p in variables[var]["forecast"] if p["date"] == target)
+            return round(float(v["median"]), 2)
         except Exception:
             return None
 

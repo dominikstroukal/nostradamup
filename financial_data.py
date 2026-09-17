@@ -384,6 +384,124 @@ def _load_repo_current() -> float | None:
         return None
 
 
+def _save_repo_known(known_through, value: float) -> None:
+    """Doplní do sidecaru, do kterého čtvrtletí je repo známé (a s jakou sazbou)."""
+    import json
+    try:
+        with open(_REPO_NOW_PATH, encoding="utf-8") as f:
+            d = json.load(f)
+    except Exception:
+        d = {}
+    d.update({"known_through": str(pd.Timestamp(known_through).date()),
+              "known_value": float(value)})
+    try:
+        with open(_REPO_NOW_PATH, "w", encoding="utf-8") as f:
+            json.dump(d, f)
+    except Exception as e:
+        log.debug("repo_current.json nezapsán: %s", e)
+
+
+def repo_anchor(repo: pd.Series) -> tuple[float | None, int]:
+    """(startovní sazba, počet známých prognózních kroků) pro produkční prognózu.
+
+    Start = právě platná sazba; když je běžné čtvrtletí už uzavřené (žádné další
+    jednání ČNB), je i jeho koncová sazba známá a první krok(y) se nehýbou.
+    Jen pro produkci a scénáře; backtest to nevolá (neprosákla by budoucnost).
+    """
+    rate, fixed = _load_repo_current(), 0
+    known = load_repo_known()
+    if known is not None:
+        first_q = (_extend_to_present(repo.dropna()).index[-1]
+                   + pd.DateOffset(months=3))
+        if known[0] >= first_q:
+            fixed = len(pd.date_range(first_q, known[0], freq="QS"))
+            rate = known[1]
+    return rate, fixed
+
+
+def load_repo_known() -> tuple[pd.Timestamp, float] | None:
+    """(začátek posledního známého čtvrtletí, sazba na jeho konci), nebo None."""
+    import json
+    try:
+        with open(_REPO_NOW_PATH, encoding="utf-8") as f:
+            d = json.load(f)
+        return pd.Timestamp(d["known_through"]), float(d["known_value"])
+    except Exception:
+        return None
+
+
+# ── Harmonogram měnověpolitických jednání ČNB ────────────────────────────────
+# Repo se může změnit JEN na měnověpolitickém jednání bankovní rady (8× ročně).
+# Když v běžícím čtvrtletí už žádné nezbývá, je sazba na jeho konci známá
+# a čtvrtletí patří do skutečnosti, ne do prognózy.
+_CNB_BOARD_URL = "https://www.cnb.cz/cs/o_cnb/bankovni-rada/"
+_MEETINGS_PATH = os.path.join(RAW_DIR, "cnb_mp_meetings.json")
+# Záloha, kdyby se stránka ČNB změnila (opsáno z webu ČNB 2026-09-17).
+_MEETINGS_FALLBACK = ["2026-02-05", "2026-03-19", "2026-05-07", "2026-06-18",
+                      "2026-08-06", "2026-09-17", "2026-11-05", "2026-12-17"]
+# Rozhodnutí se zveřejňuje odpoledne; do té doby je dnešní jednání otevřené.
+_DECISION_HOUR = 15
+
+
+def fetch_cnb_mp_meetings() -> list[pd.Timestamp]:
+    """Data měnověpolitických jednání bankovní rady ČNB (kalendář na webu)."""
+    import json, re, html as _html
+    try:
+        r = requests.get(_CNB_BOARD_URL, timeout=20)
+        r.raise_for_status()
+        t = re.sub(r"<[^>]+>", " ", _html.unescape(r.text))
+        t = re.sub(r"\s+", " ", t)
+        found = re.findall(
+            r"(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})\s*Jednání bankovní rady\s*[–-]\s*měnověpolitické", t)
+        dates = sorted({pd.Timestamp(int(y), int(m), int(d)) for d, m, y in found})
+        if dates:
+            with open(_MEETINGS_PATH, "w", encoding="utf-8") as f:
+                json.dump([str(x.date()) for x in dates], f)
+            log.info("ČNB ← kalendář jednání: %d měnověpolitických jednání", len(dates))
+            return dates
+    except Exception as e:
+        log.info("Kalendář jednání ČNB nedostupný (%s) – použiji uložený/záložní.", e)
+    try:
+        with open(_MEETINGS_PATH, encoding="utf-8") as f:
+            return [pd.Timestamp(x) for x in json.load(f)]
+    except Exception:
+        return [pd.Timestamp(x) for x in _MEETINGS_FALLBACK]
+
+
+def repo_known_through(now: pd.Timestamp | None = None,
+                       meetings: list[pd.Timestamp] | None = None) -> pd.Timestamp:
+    """Začátek posledního čtvrtletí, jehož KONCOVÁ repo sazba je už známá.
+
+    Běžné čtvrtletí se počítá jako známé, když v něm už žádné měnověpolitické
+    jednání nezbývá (dnešní jednání se počítá až po zveřejnění rozhodnutí).
+    Jinak je známé jen poslední kompletní čtvrtletí.
+    """
+    # Pražský čas: CI běží v UTC, ČNB zveřejňuje rozhodnutí odpoledne u nás.
+    now = (pd.Timestamp.now(tz="Europe/Prague").tz_localize(None)
+           if now is None else pd.Timestamp(now))
+    q_start = now.to_period("Q").start_time.normalize()
+    q_end = now.to_period("Q").end_time.normalize()
+    # Pozor: pd.offsets.QuarterBegin má výchozí začátky Bře/Čer/Zář/Pro,
+    # takže by tu vyšlo 1. 6. místo 1. 4. Posun o 3 měsíce je jednoznačný.
+    last_complete = q_start - pd.DateOffset(months=3)
+    if meetings is None:
+        meetings = fetch_cnb_mp_meetings()
+    in_q = [m for m in meetings if q_start <= m <= q_end]
+    today = now.normalize()
+    open_left = [m for m in in_q
+                 if m > today or (m == today and now.hour < _DECISION_HOUR)]
+    return q_start if (in_q and not open_left) else last_complete
+
+
+def _repo_quarterly(daily: pd.Series) -> pd.Series:
+    """Repo na čtvrtletí jako sazba platná na KONCI období (ne průměr).
+
+    Průměr u administrativní sazby lže: zvýšení 19. 6. 2026 dalo za Q2
+    „3,53“, sazbu, která nikdy neplatila. ČNB i banky vykazují konec období.
+    """
+    return daily.dropna().resample("QS").last().dropna()
+
+
 def fetch_repo_rate(start: str = "2010-01-01") -> pd.Series:
     """Repo sazba CNB - zkusi vice URL variant, fallback na zalozni data."""
     log.info("CNB <- Repo sazba")
@@ -879,6 +997,9 @@ def _forecast_taylor_repo(
                                      # ne od průměru minulého Q (viz _load_repo_current).
                                      # Předává JEN produkce, aby backtestu
                                      # neprosákla budoucnost do minulosti.
+    fixed_steps: int = 0,            # prvních N kroků je ZNÁMÝCH (v čtvrtletí už
+                                     # není měnověpolitické jednání): sazba se
+                                     # v nich nehýbe a nemají rozptyl.
 ) -> pd.DataFrame:
     """
     Prognóza repo sazby ČNB pomocí stochastického Taylorova pravidla.
@@ -939,6 +1060,9 @@ def _forecast_taylor_repo(
         path = [current]
         r = current
         for t in range(steps):
+            if t < fixed_steps:          # známé čtvrtletí: žádné jednání, žádná změna
+                path.append(r)
+                continue
             pi   = inflation_path[t]
             y    = gdp_gap_path[t]
             # Taylorovo pravidlo: korekce za odchylku inflace OD CÍLE
@@ -1010,7 +1134,8 @@ def forecast_financial(
 
     # Právě platná repo sazba (administrativní, tedy známý fakt). Čte se JEN
     # tady, v produkčním vstupu; backtest volá _forecast_taylor_repo přímo.
-    repo_now = _load_repo_current()
+    repo_now, repo_fixed = (repo_anchor(df["repo_rate"])
+                            if "repo_rate" in df.columns else (None, 0))
 
     # Repo sazba - POŘADÍ DŮLEŽITÉ: počítá se před PRIBOR, který ji sleduje.
     repo_path = None
@@ -1025,6 +1150,7 @@ def forecast_financial(
                 df["repo_rate"].dropna(),
                 steps=steps,
                 current_rate=repo_now,
+                fixed_steps=repo_fixed,
                 neutral_rate=repo_neutral,
             )
         repo_path = intervals["repo_rate"]["median"].tolist()
@@ -1294,8 +1420,16 @@ def build_financial_dataset(use_cache: bool = False,
     pribor = to_quarterly(fetch_pribor())
     pribor12m = to_quarterly(fetch_pribor(tenor="1Y"))
 
-    repo  = to_quarterly(fetch_repo_rate())
+    repo  = _repo_quarterly(fetch_repo_rate())
     unempl = to_quarterly(fetch_unemployment())
+
+    # Do kterého čtvrtletí je repo známé (podle kalendáře jednání ČNB). Běžné Q
+    # se v datasetu ořízne jako všechno ostatní, ale jeho známá koncová sazba
+    # se uloží bokem: prognóza ho pak drží pevně a web ho ukáže jako skutečnost.
+    kt = repo_known_through()
+    if kt in repo.index:
+        _save_repo_known(kt, float(repo.loc[kt]))
+        log.info("Repo známé do %s (%.2f %%)", kt.date(), float(repo.loc[kt]))
 
     # Sestav DataFrame – inner join (průnik datumů) zamezí NaN řádkům
     # kdy jedna série (EUR/USD) sahá dál do budoucnosti než ostatní
