@@ -11,5 +11,18 @@
    "ukotvenost": "nad cílem",
    "ukotvenost_odchylka": 0.6
   }
+ },
+ {
+  "vintage": "2026-Q4",
+  "generated": "2026-10-05",
+  "headline": {
+   "inflace_1y": 2.44,
+   "inflace_3y": 2.65,
+   "cil": 2.0,
+   "hdp_1y": 1.8,
+   "repo_1y": 3.75,
+   "ukotvenost": "nad cílem",
+   "ukotvenost_odchylka": 0.6
+  }
  }
 ]
