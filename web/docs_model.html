@@ -995,6 +995,12 @@ code { font-family: 'IBM Plex Mono', 'Menlo', monospace; }
   Simulační cesty jsou generovány pro každou proměnnou zvlášť; sdílené šoky nejsou plně korelované (konzistentní je jen deterministická korekce z vazeb). Plná konzistence by vyžadovala simultánní simulaci vektoru šoků s odhadnutou kovarianční maticí reziduí. Šoky navíc neumí generovat těžké chvosty ani trvale persistentní posuny (např. permanentní energetický šok).
 </div>
 
+<div class="callout callout-limit">
+  <div class="callout-title">7. Závislost na živých externích zdrojích a riziko tichého zastarání</div>
+  Model nemá vlastní databázi: při každém běhu stahuje data z ČSÚ, Eurostatu, ČNB a ECB. Tyto zdroje se mění, sady se vyřazují a formáty posouvají. Protože každý fetcher má zálohu, <strong>selhání zdroje se neprojeví pádem, ale tiše zastaralým číslem</strong>, které vypadá normálně. Je to nejzákeřnější třída chyb v celém projektu a odstranit ji úplně nelze, jen hlídat.
+  <p>Doložený případ: <strong>EUR/CZK bylo zamrzlé na hodnotě 24,273 za 2025Q4</strong> od prvního vintage s daty za rok 2026 až do opravy 7. 10. 2026. Příčinou bylo použití <code>Series.update()</code> při spojování zálohy se živými daty; ta metoda zapisuje jen do indexů, které v záloze existují, takže čtvrtletí novější než záloha se zahazovala. Log navíc hlásil poslední datum živé řady, ne té spojené, takže výpadek vypadal jako úspěch. Dotčené prognózy počítaly kanál ERPT se zastaralým kurzem; skutečné hodnoty byly 24,328 / 24,298 / 24,227 za 2026Q1 až Q3, takže chyba v úrovni byla do 0,06 Kč a dopad na inflační prognózu zanedbatelný. Opraveno na <code>combine_first()</code>, stejná chyba odstraněna i u PRIBORu a logy nyní hlásí skutečný konec datasetu.</p>
+</div>
+
 </section>
 
 <!-- ═══════════════════════════════════════════════════════ -->

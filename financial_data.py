@@ -144,11 +144,14 @@ def fetch_eurczk(start: str = "2010-01-01") -> pd.Series:
     live = pd.to_numeric(live, errors="coerce").dropna()
     # Čtvrtletní průměry z živých dat
     live_q = live.resample("QS").mean().dropna()
-    combined = fallback.copy()
-    combined.update(live_q)
-    log.info("EUR/CZK: záložní + %d živých čtvrtletí (poslední: %s)",
-             len(live_q), live_q.index[-1].date() if len(live_q) else "n/a")
-    return combined.sort_index()
+    # combine_first, NE update(): update() zapisuje jen do indexů, které už
+    # v záloze existují, takže čtvrtletí novější než záloha tiše mizela a kurz
+    # zamrzl na konci zálohy. combine_first drží sjednocení indexů a živá data
+    # mají přednost.
+    combined = live_q.combine_first(fallback).sort_index()
+    log.info("EUR/CZK: záložní + %d živých čtvrtletí (dataset do %s)",
+             len(live_q), combined.index[-1].date() if len(combined) else "n/a")
+    return combined
 
 
 def fetch_eurusd(start: str = "2010-01-01") -> pd.Series:
@@ -264,10 +267,12 @@ def fetch_pribor(start: str = "2010-01-01", tenor: str = "3M") -> pd.Series:
         live = pd.Series(records, name=_colname).sort_index()
         live = live[live.index >= start]
         live_q = live.resample("QS").mean().dropna()
-        combined = fallback.copy()
-        combined.update(live_q)
-        log.info("PRIBOR %s: záložní + %d živých čtvrtletí", tenor, len(live_q))
-        return combined.sort_index()
+        # combine_first, NE update() – viz fetch_eurczk: update() by zahodilo
+        # čtvrtletí novější, než kam sahá záloha.
+        combined = live_q.combine_first(fallback).sort_index()
+        log.info("PRIBOR %s: záložní + %d živých čtvrtletí (dataset do %s)",
+                 tenor, len(live_q), combined.index[-1].date())
+        return combined
     log.info("PRIBOR %s: živé stahování nedostupné, používám záložní data.", tenor)
     return fallback
 
