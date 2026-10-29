@@ -57,6 +57,13 @@ a publikuje web na GitHub Pages.
 Kompletní technický popis modelu (kanály, kalibrace, backtest, limity):
 <https://dominikstroukal.github.io/nostradamup/docs_model.html>
 
+## Přispívání
+
+Chceš něco opravit, nebo nesouhlasíš s kalibrací? Vítané. Pravidla, laťku
+kvality a pasti, do kterých tu už někdo spadl, shrnuje
+**[CONTRIBUTING.md](CONTRIBUTING.md)**. Krátce: změna modelu patří do PR
+a v popisu musí mít Theil U před a po.
+
 ## Licence
 
 Projekt je open source a **můžete ho volně použít, stačí uvést autora.**
