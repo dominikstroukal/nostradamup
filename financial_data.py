@@ -43,6 +43,19 @@ CHARTS_DIR  = os.path.join(BASE_DIR, "outputs", "charts")
 for d in [RAW_DIR, CHARTS_DIR]:
     os.makedirs(d, exist_ok=True)
 
+
+def _reg(key: str, last_obs, live: bool = True) -> None:
+    """Ohlásí registru vstupních řad, co fetcher přinesl.
+
+    Hlídání zdrojů nesmí shodit prognózu, proto se chyby polykají. Registr je
+    kontrolní vrstva, ne závislost výpočtu.
+    """
+    try:
+        import data_registry
+        data_registry.record(key, last_obs, live=live)
+    except Exception:
+        pass
+
 # ── MUP barvy (stejné jako var_model.py) ──────────────────────────────────────
 MUP = {
     "navy":      "#00205B",
@@ -138,10 +151,15 @@ def fetch_eurczk(start: str = "2010-01-01") -> pd.Series:
     fallback = _fallback_eurczk()
     if not frames:
         log.info("EUR/CZK: živé stahování nedostupné, používám záložní data.")
+        _reg("cnb_eurczk", fallback.index[-1] if len(fallback) else None,
+             live=False)
         return fallback
     live = pd.concat(frames).sort_index()
     live = live[live.index >= start]
     live = pd.to_numeric(live, errors="coerce").dropna()
+    # Registr dostává poslední ŽIVÉ pozorování, ne konec spojené řady. Záloha
+    # by jinak maskovala, že živý zdroj umlkl.
+    _reg("cnb_eurczk", live.index[-1] if len(live) else None, live=len(live) > 0)
     # Čtvrtletní průměry z živých dat
     live_q = live.resample("QS").mean().dropna()
     # combine_first, NE update(): update() zapisuje jen do indexů, které už
@@ -176,10 +194,13 @@ def fetch_eurusd(start: str = "2010-01-01") -> pd.Series:
             name="eurusd",
         ).dropna().sort_index()
         log.info("EUR/USD načteno: %d pozorování", len(s))
+        _reg("ecb_eurusd", s.index[-1] if len(s) else None, live=len(s) > 0)
         return s
     except Exception as e:
         log.info("EUR/USD: %s – záložní data.", e)
-        return _fallback_eurusd()
+        fb = _fallback_eurusd()
+        _reg("ecb_eurusd", fb.index[-1] if len(fb) else None, live=False)
+        return fb
 
 
 def fetch_pribor(start: str = "2010-01-01", tenor: str = "3M") -> pd.Series:
@@ -263,9 +284,11 @@ def fetch_pribor(start: str = "2010-01-01", tenor: str = "3M") -> pd.Series:
     if tenor.upper() == "1Y":
         # 12M nemá vlastní fallback sérii; použij 3M + typický spread ~0.2 pp
         fallback = (fallback + 0.2).rename("pribor12m")
+    _key = "cnb_pribor12m" if tenor.upper() == "1Y" else "cnb_pribor3m"
     if records:
         live = pd.Series(records, name=_colname).sort_index()
         live = live[live.index >= start]
+        _reg(_key, live.index[-1] if len(live) else None, live=len(live) > 0)
         live_q = live.resample("QS").mean().dropna()
         # combine_first, NE update() – viz fetch_eurczk: update() by zahodilo
         # čtvrtletí novější, než kam sahá záloha.
@@ -273,6 +296,7 @@ def fetch_pribor(start: str = "2010-01-01", tenor: str = "3M") -> pd.Series:
         log.info("PRIBOR %s: záložní + %d živých čtvrtletí (dataset do %s)",
                  tenor, len(live_q), combined.index[-1].date())
         return combined
+    _reg(_key, fallback.index[-1] if len(fallback) else None, live=False)
     log.info("PRIBOR %s: živé stahování nedostupné, používám záložní data.", tenor)
     return fallback
 
@@ -555,13 +579,19 @@ def fetch_repo_rate(start: str = "2010-01-01") -> pd.Series:
                 s = s[s.index >= start]
                 s.name = "repo_rate"
                 _save_repo_current(chg.iloc[-1], chg.index[-1])
+                # Registru se hlásí datum poslední ZMĚNY sazby. Vrácená řada
+                # je dopředu rozprostřená na dny, takže by vždy končila dneškem
+                # a stáří zdroje by zamaskovala.
+                _reg("cnb_repo", chg.index[-1], live=True)
                 log.info("Repo sazba: živě z ČNB, %d změn, platná %.2f %% od %s",
                          len(chg), float(chg.iloc[-1]), chg.index[-1].date())
                 return s
         except Exception as e:
             log.debug("Repo URL %s: %s", url, e)
     log.info("Repo sazba: živé stahování není dostupné (ČNB nevystavuje veřejné API), používám záložní data do Q2 2026.")
-    return _fallback_repo_rate()
+    fb = _fallback_repo_rate()
+    _reg("cnb_repo", fb.index[-1] if len(fb) else None, live=False)
+    return fb
 
 def _parse_jsonstat_series(js: dict) -> dict:
     """
@@ -630,13 +660,16 @@ def fetch_unemployment(start: str = "2010-01-01") -> pd.Series:
                 s = s[s.index >= start]
                 log.info("Nezaměstnanost načtena: %d pozorování (age=%s)",
                          len(s), dims["age"])
+                _reg("eurostat_unempl", s.index[-1], live=True)
                 return s
         except Exception as e:
             log.debug("Nezaměstnanost pokus %s selhal: %s", dims["age"], e)
             continue
 
     log.info("Nezaměstnanost: Eurostat API nevrátilo data – záložní data.")
-    return _fallback_unemployment()
+    fb = _fallback_unemployment()
+    _reg("eurostat_unempl", fb.index[-1] if len(fb) else None, live=False)
+    return fb
 
 def _fallback_repo_rate() -> pd.Series:
     """Repo sazba ČNB - čtvrtletní průměry 2010-2024 (zdroj ČNB)."""
@@ -1466,6 +1499,14 @@ def build_financial_dataset(use_cache: bool = False,
 
     log.info("Finanční dataset uložen: %s (%d čtvrtletí, do %s)",
              path, len(df), df.index[-1].date())
+
+    # Viz data_fetch: souhrn stavu vstupních řad po stažení finančních dat.
+    try:
+        import data_registry
+        data_registry.report()
+        data_registry.save_status()
+    except Exception as e:
+        log.info("(registr zdrojů přeskočen: %s)", e)
     return df
 
 

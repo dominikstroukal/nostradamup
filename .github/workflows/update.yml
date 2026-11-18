@@ -57,6 +57,15 @@ jobs:
       - name: Stažení dat
         run: python data_fetch.py
 
+      # Hlídač tichého zastarání. Nepadá na záloze (běh musí dojít až na web),
+      # ale zpoždění zdroje je vidět v logu i v přehledu kroků. Když je něco
+      # pozadu, krok zežloutne a dá se to chytit dřív, než se to propíše do
+      # publikované prognózy.
+      - name: Kontrola vstupních řad
+        id: zdroje
+        continue-on-error: true
+        run: python data_registry.py
+
       - name: Finanční data a prognózy
         run: |
           python financial_data.py \
@@ -86,6 +95,17 @@ jobs:
           assert d.get("variables"), "chybí proměnné"
           print(f"OK: inflace 1Y = {v} %, {len(d['variables'])} proměnných")
           PY
+
+      - name: Shrnutí stavu zdrojů
+        if: always()
+        run: |
+          if [ "${{ steps.zdroje.outcome }}" = "failure" ]; then
+            echo "### Vstupní řady: něco je pozadu" >> $GITHUB_STEP_SUMMARY
+            echo "Prognóza se publikovala, ale aspoň jedna řada nedorazila včas." >> $GITHUB_STEP_SUMMARY
+            echo "Podrobnosti v kroku *Kontrola vstupních řad*." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Vstupní řady v pořádku" >> $GITHUB_STEP_SUMMARY
+          fi
 
       - name: Commit výsledků
         run: |

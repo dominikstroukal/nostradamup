@@ -33,6 +33,19 @@ os.makedirs(RAW_DIR, exist_ok=True)
 _LAST_OBS_PATH = os.path.join(RAW_DIR, "last_obs.json")
 
 
+def _reg(key: str, last_obs, live: bool = True) -> None:
+    """Ohlásí registru vstupních řad, co fetcher přinesl.
+
+    Hlídání zdrojů nesmí shodit stahování dat, proto se chyby polykají.
+    Registr je kontrolní vrstva, ne závislost výpočtu.
+    """
+    try:
+        import data_registry
+        data_registry.record(key, last_obs, live=live)
+    except Exception:
+        pass
+
+
 def save_last_obs(mapping: dict) -> None:
     """Uloží poslední skutečně pozorované čtvrtletí per proměnná (merge do JSON).
     Klíč = název proměnné, hodnota = ISO datum začátku Q. Volá data_fetch
@@ -329,7 +342,9 @@ def fetch_csu_cpi_monthly() -> pd.DataFrame:
         m = m.combine_first(_csu_cpi_history())
     except Exception as e:
         log.info("  (historie CPI z WCEN01M přeskočena: %s)", e)
-    return m.sort_index()
+    m = m.sort_index()
+    _reg("csu_cpi", m.index[-1] if len(m) else None, live=len(m) > 0)
+    return m
 
 
 def fetch_csu_cpi() -> pd.Series:
@@ -377,7 +392,9 @@ def fetch_csu_fuel() -> pd.DataFrame:
     wk = piv.mean(axis=1)                       # týdenní průměr obou paliv
     out = pd.DataFrame({"fuel": wk.resample("MS").mean(),
                         "weeks": wk.resample("MS").count()})
-    return out[out["weeks"] > 0]
+    out = out[out["weeks"] > 0]
+    _reg("csu_fuel", out.index[-1] if len(out) else None, live=len(out) > 0)
+    return out
 
 
 # ─────────────────────────────────────────────
@@ -412,6 +429,7 @@ def fetch_csu_wages() -> pd.Series:
 
     s = pd.Series((d["Hodnota"].astype(float) - 100.0).values,
                   index=[_q(c) for c in d["CasQ"]], name="wages_yoy").sort_index()
+    _reg("csu_wages", s.index[-1] if len(s) else None, live=len(s) > 0)
     return s
 
 
@@ -437,6 +455,7 @@ def fetch_csu_hicp() -> pd.Series:
     idx = pd.to_datetime(d["CASRMX"].astype(str) + "-01")
     s = pd.Series(d["Hodnota"].astype(float).values, index=idx,
                   name="hicp_yoy").sort_index()
+    _reg("csu_hicp", s.index[-1] if len(s) else None, live=len(s) > 0)
     return s
 
 
@@ -450,6 +469,8 @@ def build_cz_dataset() -> pd.DataFrame:
 
     try:
         gdp_raw = fetch_eurostat("namq_10_gdp",  "Q.GR.SCA.B1GQ.CZ",  "gdp_qoq")
+        _reg("eurostat_gdp", gdp_raw.index[-1] if len(gdp_raw) else None,
+             live=len(gdp_raw) > 0)
         # HDP YoY = 4Q rolling součet QoQ (dataset nemá přímou YoY sérii pro tyto dimenze)
         gdp_yoy_raw = gdp_raw.rolling(4).sum()
         gdp_yoy_raw.name = "gdp_yoy"
@@ -659,6 +680,16 @@ if __name__ == "__main__":
     cz = build_cz_dataset()
     us = build_us_dataset()   # potřebuješ FRED_API_KEY v env
     log.info("Hotovo. CZ: %d čtvrtletí, US: %d čtvrtletí", len(cz), len(us))
+
+    # Kontrola zdrojů: řady, které měly být zveřejněné, ale nepřišly. Sem
+    # patří i tichý pád na zálohu. Hlídání nesmí shodit stahování, proto
+    # jen hlásí; blokuje až samostatný běh `python data_registry.py` v CI.
+    try:
+        import data_registry
+        data_registry.report()
+        data_registry.save_status()
+    except Exception as e:
+        log.info("(registr zdrojů přeskočen: %s)", e)
     print("\n--- CZ dataset (posledních 6 čtvrtletí) ---")
     print(cz.tail(6).to_string())
     print("\n--- US dataset (posledních 6 čtvrtletí) ---")

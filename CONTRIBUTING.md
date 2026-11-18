@@ -122,6 +122,23 @@ transmisi a scénáře. Co je nepřijatelné, je zamést to pod koberec.
 **Zdroje mizí a fallback se pak tváří jako úspěch.** Tohle je nejzákeřnější
 třída chyb v celém repu, protože nic nespadne a čísla vypadají normálně.
 
+Proto existuje **registr vstupních řad** (`data_registry.py`). U každé řady je
+zapsané, jak rychle ji její instituce obvykle zveřejňuje, takže se dá spočítat,
+jaké období už MÁ být k dispozici, a porovnat s tím, co jsme stáhli:
+
+```bash
+python data_registry.py        # tabulka stavu, nenulový exit při zpoždění
+```
+
+Pouští se sám na konci `data_fetch.py` i `financial_data.py` a jako samostatný
+krok v CI. **Když přidáváš nový zdroj, zapiš ho do `SOURCES`** a z fetcheru
+zavolej `_reg(klíč, poslední_pozorování, live=...)`. Hlas se **posledním živým**
+pozorováním, ne koncem řady spojené se zálohou, jinak záloha zamaskuje přesně
+to, co má registr odhalit.
+
+Registr rozlišuje primární zdroj od zálohy. Zastaralá záloha neblokuje, dokud
+primární zdroj šlape, protože alarm, který houká pořád, nikdo nečte.
+
 - ČSÚ vyřadil sadu `WCEN01M` i s jejím živým výběrem a inflace tiše zamrzla na
   prosinci 2025. Nástupci jsou sady „od 2026": CPI `CEN0101E`, HICP `CEN0101M`.
 - `Series.update()` zapisuje jen do indexů, které v cílové sérii už existují.
