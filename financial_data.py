@@ -233,14 +233,32 @@ def fetch_pribor(start: str = "2010-01-01", tenor: str = "3M") -> pd.Series:
             lines = r.text.strip().splitlines()
             if not lines:
                 continue
-            # Najdi řádek s hlavičkou (obsahuje datum a sazby)
+            # TXT ČNB má DVĚ hlavičkové řádky a u každé splatnosti DVA sloupce:
+            #
+            #   |1 den||7 dní||14 dní||1 měsíc||...||3 měsíce||...||1 rok|
+            #   Datum|PRIBID|PRIBOR|PRIBID|PRIBOR|PRIBID|PRIBOR|...
+            #
+            # Název splatnosti sedí nad sloupcem PRIBID, kdežto my chceme
+            # PRIBOR, tedy ten hned vedle. Dřívější parser bral sloupec
+            # rovnou pod názvem, takže roky četl PRIBID (0,04 místo 0,34).
+            # Od poloviny roku 2015 navíc ČNB PRIBID přestala publikovat,
+            # sloupec zůstal prázdný, převod na float padal a řádky se tiše
+            # přeskakovaly. Živá data proto končila v červnu 2015 a všechno
+            # novější potichu jelo ze zálohy.
             header = []
+            side_row = []
             data_start = 0
             for i, line in enumerate(lines):
-                if "|" in line:
-                    header = [h.strip().upper() for h in line.split("|")]
+                if "|" not in line:
+                    continue
+                cells = [h.strip() for h in line.split("|")]
+                if any(c.upper() == "PRIBOR" for c in cells):
+                    side_row = [c.upper() for c in cells]
                     data_start = i + 1
                     break
+                if not header:
+                    header = [h.strip().upper() for h in cells]
+                    data_start = i + 1
             # Index sloupce podle tenoru - normalizované porovnání
             # (ČNB TXT mívá česky "3 měsíce" / "1 rok", s diakritikou i bez)
             def _norm(x):
@@ -255,15 +273,22 @@ def fetch_pribor(start: str = "2010-01-01", tenor: str = "3M") -> pd.Series:
             col_3m = None
             for j, h in enumerate(header):
                 if _norm(h) in _norm_targets:
-                    col_3m = j
+                    # Z názvu splatnosti se posuň na nejbližší sloupec PRIBOR.
+                    # Bez druhé hlavičky (starší nebo jiný formát) se bere
+                    # sloupec hned vpravo, protože dvojice je PRIBID, PRIBOR.
+                    if side_row:
+                        col_3m = next((k for k in range(j, len(side_row))
+                                       if side_row[k] == "PRIBOR"), None)
+                    else:
+                        col_3m = j + 1
                     break
-            if col_3m is None:
-                # Poziční fallback: 3M = 6. sloupec, 1Y = poslední sloupec
-                # (formát: Datum|1D|1T|2T|1M|2M|3M|6M|9M|1R - 1Y je vždy poslední)
-                if tenor.upper() == "3M" and len(header) >= 6:
-                    col_3m = 5
-                elif tenor.upper() in ("1Y", "12M") and len(header) >= 9:
-                    col_3m = len(header) - 1
+            if col_3m is None and side_row:
+                # Poziční záchrana: PRIBOR sloupce jsou 2, 4, 6, ... a pořadí
+                # splatností je 1D, 7D, 14D, 1M, 2M, 3M, 6M, 9M, 1R.
+                pribor_cols = [k for k, v in enumerate(side_row) if v == "PRIBOR"]
+                order = {"3M": 5, "1Y": 8}.get(tenor.upper())
+                if order is not None and len(pribor_cols) > order:
+                    col_3m = pribor_cols[order]
             if col_3m is None:
                 continue
             for line in lines[data_start:]:

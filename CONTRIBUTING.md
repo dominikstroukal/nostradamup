@@ -55,19 +55,20 @@ python backtest.py --var cpi_yoy   # jen jedna proměnná, rychlejší
 Kritérium je **Theil U**: poměr chyby modelu k chybě naivní predikce
 (random walk). `U < 1` znamená lepší než náhodná procházka, `U > 1` horší.
 
-Stav k měření z 29. 10. 2026, 12 oken, horizont 4Q:
+Stav k měření z 18. 11. 2026, 12 oken, horizont 4Q:
 
 | Proměnná | Theil U | | Proměnná | Theil U |
 |---|---|---|---|---|
-| CPI | 0,75 | | HDP QoQ | 0,87 |
-| PRIBOR | 0,77 | | Repo | 0,87 |
-| HICP | 0,82 | | Nezaměstnanost | 0,92 |
-| HDP YoY | 0,86 | | Mzdy | 0,99 |
-| | | | EUR/CZK | 1,09 |
-| | | | EUR/USD | 1,20 |
+| CPI | 0,64 | | HDP YoY | 0,88 |
+| HICP | 0,74 | | Nezaměstnanost | 0,92 |
+| PRIBOR | 0,80 | | Mzdy | 1,01 |
+| HDP QoQ | 0,85 | | EUR/CZK | 1,09 |
+| Repo | 0,87 | | EUR/USD | 1,20 |
 
-**8 z 10 poráží random walk.** Kurzy prohrávají očekávaně, to je
-Meese-Rogoffův výsledek z roku 1983 a není to vada tohohle modelu.
+**7 z 10 poráží random walk.** Kurzy prohrávají očekávaně, to je
+Meese-Rogoffův výsledek z roku 1983 a není to vada tohohle modelu. Mzdy se
+drží těsně kolem hranice a přelezly ji s daty za 2026Q3; dřív jich poráželo
+random walk osm.
 
 > **Tabulku po zásahu do modelu přeměř, nedopisuj.** A když ti Theil U po změně
 > vyjde hůř, než je v tabulce, **nejdřív změř stejným backtestem i stav před
